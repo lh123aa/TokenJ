@@ -98,3 +98,97 @@ fn find_price(config: &Config, provider: &str, model: &str) -> crate::config::Mo
         cache_read_per_mtok: 2.0,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, PriceConfig};
+
+    fn test_config() -> Config {
+        Config {
+            port: 9100,
+            cert_dir: std::path::PathBuf::from("/tmp/certs"),
+            data_dir: std::path::PathBuf::from("/tmp/data"),
+            db_path: std::path::PathBuf::from("/tmp/data.db"),
+            exclude_hosts: vec![],
+            prices: PriceConfig::default(),
+        }
+    }
+
+    #[test]
+    fn test_claude_cache_hit_90_percent_saving() {
+        let cfg = test_config();
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 5000, 200, 4500, 0, &cfg);
+        // Cached tokens (4500) get 90% discount: $0.30 vs $3.00/MTok
+        // But output tokens ($15/MTok) are not cached, so overall rate is lower
+        assert!(result.saving_rate > 40.0, "Saving rate should be >40%, got {:.1}%", result.saving_rate);
+        assert!(result.saving_cents > 0.0, "Should have saving");
+    }
+
+    #[test]
+    fn test_claude_cache_full_hit_90_percent() {
+        let cfg = test_config();
+        // Only input tokens, no output → full 90% on cached portion
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 5000, 0, 4500, 0, &cfg);
+        assert!(result.saving_rate > 80.0, "Saving rate should be ~90%, got {:.1}%", result.saving_rate);
+    }
+
+    #[test]
+    fn test_claude_no_cache_no_saving() {
+        let cfg = test_config();
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 5000, 200, 0, 0, &cfg);
+        assert_eq!(result.saving_rate, 0.0, "No cache = no saving");
+        assert_eq!(result.saving_cents, 0.0, "Saving should be 0");
+    }
+
+    #[test]
+    fn test_claude_cache_write_cost_more() {
+        let cfg = test_config();
+        // First request writes cache → costs 125% of input
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 5000, 200, 0, 5000, &cfg);
+        // Cache write is more expensive, so saving should be negative
+        assert!(result.saving_cents < 0.0, "Cache write should cost more, got saving: {:.4}", result.saving_cents);
+    }
+
+    #[test]
+    fn test_openai_cache_hit_75_percent_saving() {
+        let cfg = test_config();
+        let result = calculate_saving("openai", "gpt-4o", 3000, 150, 2800, 0, &cfg);
+        assert!(result.saving_rate > 30.0, "Saving rate should be >30%, got {:.1}%", result.saving_rate);
+    }
+
+    #[test]
+    fn test_deepseek_cache_hit_90_percent_saving() {
+        let cfg = test_config();
+        let result = calculate_saving("deepseek", "deepseek-v4-pro", 2000, 100, 1800, 0, &cfg);
+        assert!(result.saving_rate > 30.0, "Saving rate should be >30%, got {:.1}%", result.saving_rate);
+    }
+
+    #[test]
+    fn test_unknown_provider_fallback_price() {
+        let cfg = test_config();
+        let result = calculate_saving("unknown", "some-model", 1000, 100, 0, 0, &cfg);
+        assert!(result.actual_cost_cents > 0.0, "Fallback price should produce cost");
+    }
+
+    #[test]
+    fn test_zero_tokens_no_cost() {
+        let cfg = test_config();
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 0, 0, 0, 0, &cfg);
+        assert_eq!(result.actual_cost_cents, 0.0);
+        assert_eq!(result.saving_cents, 0.0);
+        assert_eq!(result.saving_rate, 0.0);
+    }
+
+    #[test]
+    fn test_model_price_matching_by_pattern() {
+        let cfg = test_config();
+        // Should match "opus-4-7" pattern
+        let r1 = calculate_saving("anthropic", "claude-opus-4-7", 1000, 100, 900, 0, &cfg);
+        assert!(r1.saving_cents > 0.0);
+
+        // Should match "haiku" pattern
+        let r2 = calculate_saving("anthropic", "claude-haiku-4-5", 1000, 100, 0, 0, &cfg);
+        assert!(r2.actual_cost_cents > 0.0);
+    }
+}

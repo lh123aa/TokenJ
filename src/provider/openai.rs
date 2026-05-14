@@ -100,3 +100,88 @@ fn generate_cache_key(body: &Value) -> Option<String> {
 
     Some(format!("tokenj-{}", hash_hex))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_inject_prompt_cache_key_on_long_prompt() {
+        let mut body = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "system", "content": "A".repeat(5000)},
+                {"role": "user", "content": "hello"}
+            ]
+        });
+        let result = inject(&mut body);
+        assert!(result.injected, "Should inject prompt_cache_key on long prompt");
+        assert!(body.get("prompt_cache_key").is_some(), "prompt_cache_key should be present");
+        assert!(body["prompt_cache_key"].as_str().unwrap().starts_with("tokenj-"));
+    }
+
+    #[test]
+    fn test_no_inject_on_short_prompt() {
+        let mut body = json!({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "hi"}
+            ]
+        });
+        let result = inject(&mut body);
+        assert!(!result.injected, "Should NOT inject on short prompt");
+    }
+
+    #[test]
+    fn test_no_inject_if_key_already_exists() {
+        let mut body = json!({
+            "model": "gpt-4o",
+            "prompt_cache_key": "my-custom-key",
+            "messages": [
+                {"role": "system", "content": "A".repeat(1500)},
+                {"role": "user", "content": "hello"}
+            ]
+        });
+        let result = inject(&mut body);
+        assert!(!result.injected, "Should NOT inject when key already exists");
+    }
+
+    #[test]
+    fn test_parse_cache_with_hit() {
+        let body = json!({
+            "usage": {
+                "prompt_tokens": 2000,
+                "completion_tokens": 150,
+                "prompt_tokens_details": {
+                    "cached_tokens": 1500
+                }
+            }
+        });
+        let result = parse_cache(&body);
+        assert_eq!(result.input_tokens, 2000);
+        assert_eq!(result.output_tokens, 150);
+        assert_eq!(result.cached_tokens, 1500);
+    }
+
+    #[test]
+    fn test_parse_cache_no_cache() {
+        let body = json!({
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50
+            }
+        });
+        let result = parse_cache(&body);
+        assert_eq!(result.cached_tokens, 0);
+    }
+
+    #[test]
+    fn test_parse_cache_empty_usage() {
+        let body = json!({});
+        let result = parse_cache(&body);
+        assert_eq!(result.input_tokens, 0);
+        assert_eq!(result.output_tokens, 0);
+        assert_eq!(result.cached_tokens, 0);
+    }
+}

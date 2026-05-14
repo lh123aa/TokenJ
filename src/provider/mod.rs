@@ -17,7 +17,8 @@ pub enum Provider {
 
 impl Provider {
     pub fn from_host(host: &str) -> Self {
-        match host {
+        let host = host.to_lowercase();
+        match host.as_str() {
             h if h.contains("anthropic.com") => Provider::Anthropic,
             h if h.contains("api.openai.com") => Provider::OpenAI,
             h if h.contains("openai.com") => Provider::OpenAI,
@@ -113,4 +114,82 @@ fn remove_cache_control(value: &mut Value) -> u32 {
         _ => {}
     }
     count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_provider_from_host_anthropic() {
+        assert_eq!(Provider::from_host("api.anthropic.com"), Provider::Anthropic);
+        assert_eq!(Provider::from_host("ANTHROPIC.COM"), Provider::Anthropic);
+    }
+
+    #[test]
+    fn test_provider_from_host_openai() {
+        assert_eq!(Provider::from_host("api.openai.com"), Provider::OpenAI);
+        assert_eq!(Provider::from_host("api.openai.com/v1"), Provider::OpenAI);
+    }
+
+    #[test]
+    fn test_provider_from_host_deepseek() {
+        assert_eq!(Provider::from_host("api.deepseek.com"), Provider::DeepSeek);
+    }
+
+    #[test]
+    fn test_provider_from_host_gemini() {
+        assert_eq!(Provider::from_host("generativelanguage.googleapis.com"), Provider::Gemini);
+    }
+
+    #[test]
+    fn test_provider_from_host_glm() {
+        assert_eq!(Provider::from_host("open.bigmodel.cn"), Provider::GLM);
+    }
+
+    #[test]
+    fn test_provider_from_host_unknown() {
+        match Provider::from_host("example.com") {
+            Provider::Unknown(h) => assert_eq!(h, "example.com"),
+            _ => panic!("Should be Unknown"),
+        }
+    }
+
+    #[test]
+    fn test_provider_names() {
+        assert_eq!(Provider::Anthropic.name(), "anthropic");
+        assert_eq!(Provider::OpenAI.name(), "openai");
+        assert_eq!(Provider::DeepSeek.name(), "deepseek");
+        assert_eq!(Provider::Gemini.name(), "gemini");
+        assert_eq!(Provider::GLM.name(), "glm");
+        assert_eq!(Provider::Unknown("x".into()).name(), "unknown");
+    }
+
+    #[test]
+    fn test_inject_cache_unknown_provider() {
+        let mut body = serde_json::json!({"model": "test"});
+        let result = inject_cache_headers(&Provider::Unknown("x".into()), &mut body);
+        assert!(!result.injected);
+    }
+
+    #[test]
+    fn test_strip_cache_control_from_glm() {
+        let mut body = serde_json::json!({
+            "model": "glm-5",
+            "messages": [{"role": "user", "content": "hi", "cache_control": {"type": "ephemeral"}}]
+        });
+        let result = inject_cache_headers(&Provider::GLM, &mut body);
+        assert!(!result.injected);
+        assert!(result.details[0].contains("Stripped"));
+        // Verify cache_control was removed
+        let msg = &body["messages"][0];
+        assert!(msg.get("cache_control").is_none());
+    }
+
+    #[test]
+    fn test_parse_cache_result_unknown_provider() {
+        let body = serde_json::json!({"usage": {"input_tokens": 100}});
+        let result = parse_cache_result(&Provider::Unknown("x".into()), &body);
+        assert_eq!(result.input_tokens, 0);
+    }
 }

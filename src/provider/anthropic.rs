@@ -81,3 +81,114 @@ fn estimate_tokens(value: &Value) -> u64 {
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_inject_on_long_system_string() {
+        let mut body = json!({
+            "model": "claude-opus-4-7",
+            "system": "A".repeat(5000),
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let result = inject(&mut body);
+        assert!(result.injected, "Should inject cache_control on long system prompt");
+        assert!(body["system"].is_array(), "System should be converted to array");
+        assert!(body["system"][0].get("cache_control").is_some(), "cache_control should be present");
+    }
+
+    #[test]
+    fn test_no_inject_on_short_system() {
+        let mut body = json!({
+            "model": "claude-opus-4-7",
+            "system": "Short",
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let result = inject(&mut body);
+        assert!(!result.injected, "Should NOT inject on short system prompt");
+    }
+
+    #[test]
+    fn test_no_inject_if_already_has_cache_control() {
+        let mut body = json!({
+            "model": "claude-opus-4-7",
+            "system": [
+                {"type": "text", "text": "A".repeat(2000), "cache_control": {"type": "ephemeral"}}
+            ],
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let result = inject(&mut body);
+        assert!(!result.injected, "Should NOT override existing cache_control");
+    }
+
+    #[test]
+    fn test_inject_on_long_array_system() {
+        let mut body = json!({
+            "model": "claude-opus-4-7",
+            "system": [
+                {"type": "text", "text": "A".repeat(3000)},
+                {"type": "text", "text": "B".repeat(3000)}
+            ],
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let result = inject(&mut body);
+        assert!(result.injected, "Should inject on long array system prompt");
+    }
+
+    #[test]
+    fn test_parse_cache_with_hit() {
+        let body = json!({
+            "usage": {
+                "input_tokens": 5200,
+                "output_tokens": 200,
+                "cache_read_input_tokens": 5000,
+                "cache_creation_input_tokens": 0
+            }
+        });
+        let result = parse_cache(&body);
+        assert_eq!(result.input_tokens, 5200);
+        assert_eq!(result.cached_tokens, 5000);
+        assert_eq!(result.cache_write_tokens, 0);
+    }
+
+    #[test]
+    fn test_parse_cache_with_write() {
+        let body = json!({
+            "usage": {
+                "input_tokens": 5200,
+                "output_tokens": 200,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 5000
+            }
+        });
+        let result = parse_cache(&body);
+        assert_eq!(result.cache_write_tokens, 5000);
+        assert_eq!(result.cached_tokens, 0);
+    }
+
+    #[test]
+    fn test_parse_cache_no_cache() {
+        let body = json!({
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 50
+            }
+        });
+        let result = parse_cache(&body);
+        assert_eq!(result.cached_tokens, 0);
+        assert_eq!(result.cache_write_tokens, 0);
+    }
+
+    #[test]
+    fn test_no_system_field_no_injection() {
+        let mut body = json!({
+            "model": "claude-opus-4-7",
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        let result = inject(&mut body);
+        assert!(!result.injected);
+    }
+}

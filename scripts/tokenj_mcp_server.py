@@ -9,7 +9,7 @@ tokenJ MCP Server - 直接在 Trae IDE 中使用 tokenJ 的 Token 分析功能
 import json
 import os
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
@@ -98,7 +98,8 @@ def calculate_estimated_saving(provider: str, model: str, input_tokens: int, out
 def get_stats(days: int = 7) -> str:
     ensure_tables()
     conn = get_db()
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since = since.isoformat()
     row = conn.execute("""
         SELECT COUNT(*) as total, COALESCE(SUM(actual_cost_cents),0) as cost,
                COALESCE(SUM(saving_cents),0) as saving,
@@ -149,8 +150,8 @@ def get_repeats(min_count: int = 3) -> str:
 def get_history(days: int = 7, provider: str = "") -> str:
     ensure_tables()
     conn = get_db()
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
-
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since = since.isoformat()
     if provider:
         rows = conn.execute("""
             SELECT * FROM requests WHERE created_at >= ? AND provider = ?

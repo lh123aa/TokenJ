@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tokenj": {
+      "command": "python",
+      "args": [
+        "scripts/tokenj_mcp_server.py"
+      ],
+      "description": "tokenJ - LLM API 缓存优化引擎"
+    }
+  }
+}

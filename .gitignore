@@ -1,0 +1,23 @@
+# Rust build
+target/
+*.exe
+*.lib
+*.exp
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TokenJ data (local user data)
+~/.tokenj/
+
+# Environment
+.env
+*.env.local
+
+# Temp
+*.log
+temp/

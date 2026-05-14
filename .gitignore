@@ -1,6 +1,5 @@
 # Rust build
 target/
-*.exe
 *.lib
 *.exp
 *.pdb

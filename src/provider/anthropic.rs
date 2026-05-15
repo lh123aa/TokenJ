@@ -1,4 +1,4 @@
-use crate::provider::{CacheInjection, CacheResult};
+use crate::provider::{estimate_tokens, CacheInjection, CacheResult};
 use serde_json::Value;
 
 const MIN_CACHE_TOKENS: u64 = 1024;
@@ -8,7 +8,7 @@ pub fn inject(body: &mut Value) -> CacheInjection {
     let mut injected = false;
 
     if let Some(system) = body.get_mut("system") {
-        let system_tokens = estimate_tokens(system);
+        let system_tokens = estimate_tokens_value(system);
         if system_tokens >= MIN_CACHE_TOKENS {
             match system {
                 Value::Array(arr) => {
@@ -67,15 +67,15 @@ pub fn parse_cache(body: &Value) -> CacheResult {
     }
 }
 
-fn estimate_tokens(value: &Value) -> u64 {
+fn estimate_tokens_value(value: &Value) -> u64 {
     match value {
-        Value::String(s) => (s.len() / 4) as u64,
-        Value::Array(arr) => arr.iter().map(|v| estimate_tokens(v)).sum(),
+        Value::String(s) => estimate_tokens(s),
+        Value::Array(arr) => arr.iter().map(|v| estimate_tokens_value(v)).sum(),
         Value::Object(map) => {
             if let Some(text) = map.get("text").and_then(|v| v.as_str()) {
-                (text.len() / 4) as u64
+                estimate_tokens(text)
             } else {
-                map.values().map(|v| estimate_tokens(v)).sum()
+                map.values().map(|v| estimate_tokens_value(v)).sum()
             }
         }
         _ => 0,

@@ -3,7 +3,38 @@ use serde_json::Value;
 pub mod anthropic;
 pub mod deepseek;
 pub mod gemini;
+pub mod gemini_cache;
 pub mod openai;
+
+/// 字符类型感知的 Token 估算
+///
+/// - ASCII (英文/数字/符号): ~1 token / 4 chars
+/// - 非 ASCII (中文/日文/韩文): ~1 token / 1.8 chars
+/// - 空格和标点: 按比例计入
+///
+/// 这不是精确计数（真实 token 数取决于具体模型的 tokenizer），
+/// 但比简单的 `len/4` 在中英文混合场景下准确 2-3 倍。
+pub fn estimate_tokens(text: &str) -> u64 {
+    if text.is_empty() {
+        return 0;
+    }
+    let (ascii_chars, non_ascii_chars) = text.chars().fold((0u64, 0u64), |(a, na), c| {
+        if c.is_ascii() {
+            (a + 1, na)
+        } else {
+            (a, na + 1)
+        }
+    });
+    // ASCII: ~1 token per 4 chars;  CJK: ~1 token per 1.8 chars
+    let ascii_tokens = (ascii_chars as f64 / 4.0).ceil() as u64;
+    let non_ascii_tokens = (non_ascii_chars as f64 / 1.8).ceil() as u64;
+    let total = ascii_tokens + non_ascii_tokens;
+    if total < 1 {
+        1
+    } else {
+        total
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Provider {

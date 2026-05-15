@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -124,14 +124,21 @@ impl PriceConfig {
 }
 
 fn dirs_data_dir() -> PathBuf {
-    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "tokenj", "tokenJ") {
-        proj_dirs.data_dir().to_path_buf()
-    } else {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .unwrap_or_else(|_| ".".into());
-        PathBuf::from(home).join(".tokenj")
-    }
+    // 统一使用 ~/.tokenj 目录，与 Python MCP Server 保持一致
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".tokenj")
+}
+
+/// Python MCP Server 友好的价格格式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlatPriceEntry {
+    pub key: String,
+    pub input_per_mtok: f64,
+    pub output_per_mtok: f64,
+    pub cache_write_per_mtok: f64,
+    pub cache_read_per_mtok: f64,
 }
 
 impl Config {
@@ -157,5 +164,141 @@ impl Config {
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(config_path, content)?;
         Ok(())
+    }
+
+    /// 导出 Python MCP Server 可读取的扁平化价格表
+    pub fn export_prices_json(&self) -> Result<()> {
+        std::fs::create_dir_all(&self.data_dir)
+            .context("Failed to create data directory")?;
+        let prices_path = self.data_dir.join("prices.json");
+        let mut entries = Vec::new();
+
+        for p in &self.prices.anthropic {
+            entries.push(FlatPriceEntry {
+                key: format!("anthropic:{}", p.pattern),
+                input_per_mtok: p.input_per_mtok,
+                output_per_mtok: p.output_per_mtok,
+                cache_write_per_mtok: p.cache_write_per_mtok,
+                cache_read_per_mtok: p.cache_read_per_mtok,
+            });
+        }
+        for p in &self.prices.openai {
+            entries.push(FlatPriceEntry {
+                key: format!("openai:{}", p.pattern),
+                input_per_mtok: p.input_per_mtok,
+                output_per_mtok: p.output_per_mtok,
+                cache_write_per_mtok: p.cache_write_per_mtok,
+                cache_read_per_mtok: p.cache_read_per_mtok,
+            });
+        }
+        for p in &self.prices.deepseek {
+            entries.push(FlatPriceEntry {
+                key: format!("deepseek:{}", p.pattern),
+                input_per_mtok: p.input_per_mtok,
+                output_per_mtok: p.output_per_mtok,
+                cache_write_per_mtok: p.cache_write_per_mtok,
+                cache_read_per_mtok: p.cache_read_per_mtok,
+            });
+        }
+
+        let content = serde_json::to_string_pretty(&entries)
+            .context("Failed to serialize prices")?;
+        std::fs::write(&prices_path, content)
+            .context("Failed to write prices.json")?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default_port() {
+        let cfg = Config::default();
+        assert_eq!(cfg.port, 9100);
+    }
+
+    #[test]
+    fn test_config_default_exclude_hosts_empty() {
+        let cfg = Config::default();
+        assert!(cfg.exclude_hosts.is_empty());
+    }
+
+    #[test]
+    fn test_price_config_default_has_anthropic() {
+        let prices = PriceConfig::default();
+        assert!(!prices.anthropic.is_empty());
+        assert!(prices.anthropic.iter().any(|p| p.pattern.contains("sonnet")));
+    }
+
+    #[test]
+    fn test_price_config_default_has_openai() {
+        let prices = PriceConfig::default();
+        assert!(!prices.openai.is_empty());
+        assert!(prices.openai.iter().any(|p| p.pattern.contains("gpt-4o")));
+    }
+
+    #[test]
+    fn test_price_config_default_has_deepseek() {
+        let prices = PriceConfig::default();
+        assert!(!prices.deepseek.is_empty());
+        assert!(prices.deepseek.iter().any(|p| p.pattern.contains("v4")));
+    }
+
+    #[test]
+    fn test_export_prices_json_format() {
+        let dir = std::env::temp_dir().join(format!("tokenj_cfg_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let cfg = Config {
+            data_dir: dir.clone(),
+            prices: PriceConfig::default(),
+            ..Config::default()
+        };
+        cfg.export_prices_json().unwrap();
+
+        let prices_path = dir.join("prices.json");
+        assert!(prices_path.exists(), "prices.json should be created");
+
+        let content = std::fs::read_to_string(&prices_path).unwrap();
+        let entries: Vec<FlatPriceEntry> = serde_json::from_str(&content).unwrap();
+        assert!(!entries.is_empty(), "Should have at least one price entry");
+
+        // Check that all entries have required fields
+        for entry in &entries {
+            assert!(!entry.key.is_empty());
+            assert!(entry.input_per_mtok > 0.0);
+            assert!(entry.output_per_mtok > 0.0);
+            assert!(entry.cache_read_per_mtok >= 0.0);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_export_prices_contains_all_providers() {
+        let dir = std::env::temp_dir().join(format!("tokenj_cfg_prov_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let cfg = Config {
+            data_dir: dir.clone(),
+            prices: PriceConfig::default(),
+            ..Config::default()
+        };
+        cfg.export_prices_json().unwrap();
+
+        let prices_path = dir.join("prices.json");
+        let content = std::fs::read_to_string(&prices_path).unwrap();
+        let entries: Vec<FlatPriceEntry> = serde_json::from_str(&content).unwrap();
+
+        let keys: Vec<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+        assert!(keys.iter().any(|k| k.starts_with("anthropic:")), "Should have anthropic prices");
+        assert!(keys.iter().any(|k| k.starts_with("openai:")), "Should have openai prices");
+        assert!(keys.iter().any(|k| k.starts_with("deepseek:")), "Should have deepseek prices");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

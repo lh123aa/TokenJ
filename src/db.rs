@@ -4,6 +4,12 @@ use std::path::Path;
 use std::sync::Mutex;
 use uuid::Uuid;
 
+/// # 性能设计
+///
+/// - 写操作通过 `tokio::task::spawn_blocking` 异步化，不阻塞 tokio 工作线程
+/// - 读操作同步返回（调用方为 async，自动 yield）
+/// - WAL 模式保证读写不互斥
+/// - `busy_timeout=5000` 避免 SQLITE_BUSY 错误
 pub struct Database {
     conn: Mutex<Connection>,
 }
@@ -85,6 +91,7 @@ impl Database {
         })
     }
 
+    /// 插入请求记录
     pub fn insert_request(&self, record: &RequestRecord) -> Result<()> {
         let conn = self.conn.lock().expect("Database mutex poisoned");
         conn.execute(
@@ -93,19 +100,10 @@ impl Database {
              cache_injected, duration_ms, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
-                record.id,
-                record.session_id,
-                record.provider,
-                record.model,
-                record.input_tokens,
-                record.output_tokens,
-                record.cached_tokens,
-                record.cache_write_tokens,
-                record.actual_cost_cents,
-                record.saving_cents,
-                record.saving_rate,
-                record.cache_injected as i32,
-                record.duration_ms,
+                record.id, record.session_id, record.provider, record.model,
+                record.input_tokens, record.output_tokens, record.cached_tokens,
+                record.cache_write_tokens, record.actual_cost_cents, record.saving_cents,
+                record.saving_rate, record.cache_injected as i32, record.duration_ms,
                 record.created_at,
             ],
         )?;
@@ -201,5 +199,127 @@ impl Database {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(records)
+    }
+}
+
+/// 通过 spawn_blocking 异步插入请求记录，不阻塞 tokio 工作线程
+///
+/// 使用示例（在 async 上下文中）:
+/// ```ignore
+/// tokio::task::spawn({
+///     let db = db.clone();
+///     let rec = record.clone();
+///     async move { db.insert_request_blocking(rec).await }
+/// });
+/// ```
+pub async fn insert_request_blocking(db: &std::sync::Arc<Database>, record: &RequestRecord) -> Result<()> {
+    let db = std::sync::Arc::clone(db);
+    let record = record.clone();
+    tokio::task::spawn_blocking(move || {
+        db.insert_request(&record)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("spawn_blocking panicked: {}", e))??;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db() -> (Database, std::path::PathBuf) {
+        let uid = Uuid::new_v4();
+        let path = std::env::temp_dir().join(format!("tokenj_db_test_{}.db", uid));
+        let db = Database::new(&path).unwrap();
+        (db, path)
+    }
+
+    fn sample_record() -> RequestRecord {
+        RequestRecord {
+            id: Uuid::new_v4().to_string(),
+            session_id: "test-session".into(),
+            provider: "anthropic".into(),
+            model: "claude-sonnet-4-6".into(),
+            input_tokens: 5000,
+            output_tokens: 200,
+            cached_tokens: 4500,
+            cache_write_tokens: 0,
+            actual_cost_cents: 0.30,
+            saving_cents: 2.70,
+            saving_rate: 90.0,
+            cache_injected: true,
+            duration_ms: 500,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    #[test]
+    fn test_db_create_and_insert() {
+        let (db, path) = temp_db();
+        db.insert_request(&sample_record()).unwrap();
+        let stats = db.get_stats_since("1970-01-01").unwrap();
+        assert_eq!(stats.total_requests, 1);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_recent_requests() {
+        let (db, path) = temp_db();
+        db.insert_request(&sample_record()).unwrap();
+        let recent = db.get_recent_requests(10).unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].provider, "anthropic");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_stats_multiple_records() {
+        let (db, path) = temp_db();
+        for _ in 0..5 {
+            db.insert_request(&sample_record()).unwrap();
+        }
+        let stats = db.get_stats_since("1970-01-01").unwrap();
+        assert_eq!(stats.total_requests, 5);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_session_lifecycle() {
+        let (db, path) = temp_db();
+        let session_id = db.create_session().unwrap();
+        db.end_session(&session_id).unwrap();
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_empty_stats() {
+        let (db, path) = temp_db();
+        let stats = db.get_stats_since("1970-01-01").unwrap();
+        assert_eq!(stats.total_requests, 0);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_multiple_providers() {
+        let (db, path) = temp_db();
+        for p in &["anthropic", "openai", "deepseek", "gemini"] {
+            let mut rec = sample_record();
+            rec.id = Uuid::new_v4().to_string();
+            rec.provider = p.to_string();
+            db.insert_request(&rec).unwrap();
+        }
+        let recent = db.get_recent_requests(10).unwrap();
+        assert_eq!(recent.len(), 4);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_db_stats_filter_by_time() {
+        let (db, path) = temp_db();
+        db.insert_request(&sample_record()).unwrap();
+        let future = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        let stats = db.get_stats_since(&future).unwrap();
+        assert_eq!(stats.total_requests, 0);
+        let _ = std::fs::remove_file(&path);
     }
 }

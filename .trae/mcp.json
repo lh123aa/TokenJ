@@ -3,9 +3,9 @@
     "tokenj": {
       "command": "python",
       "args": [
-        "scripts/tokenj_mcp_server.py"
+        "e:\\程序\\tokenJ\\scripts\\tokenj_mcp_server.py"
       ],
-      "description": "tokenJ - LLM API 缓存优化引擎"
+      "description": "tokenJ - LLM API 自动缓存优化引擎"
     }
   }
 }

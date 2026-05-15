@@ -60,27 +60,45 @@ def ensure_tables():
     conn.close()
 
 
+def _load_prices() -> dict:
+    """从 Rust 导出的 prices.json 加载价格表"""
+    prices_path = DATA_DIR / "prices.json"
+    if not prices_path.exists():
+        return {}
+    try:
+        with open(prices_path) as f:
+            entries = json.load(f)
+        return {e["key"]: {
+            "input": e["input_per_mtok"],
+            "output": e["output_per_mtok"],
+            "cache_write": e["cache_write_per_mtok"],
+            "cache_read": e["cache_read_per_mtok"],
+        } for e in entries}
+    except Exception:
+        return {}
+
 def calculate_estimated_saving(provider: str, model: str, input_tokens: int, output_tokens: int, cached_tokens: int) -> dict:
-    prices = {
-        "anthropic:sonnet": {"input": 3.0, "output": 15.0, "cache_read": 0.30},
-        "anthropic:opus": {"input": 5.0, "output": 25.0, "cache_read": 0.50},
-        "anthropic:haiku": {"input": 1.0, "output": 5.0, "cache_read": 0.10},
-        "openai:gpt-4o": {"input": 2.50, "output": 10.0, "cache_read": 0.625},
-        "openai:gpt-4o-mini": {"input": 0.15, "output": 0.60, "cache_read": 0.0375},
-        "deepseek:v4-pro": {"input": 1.74, "output": 3.48, "cache_read": 0.145},
-        "deepseek:v4-flash": {"input": 0.14, "output": 0.28, "cache_read": 0.028},
-    }
+    prices = _load_prices()
     key = f"{provider}:"
     matched = None
+
+    # 先尝试精确匹配模式
+    model_lower = model.lower()
     for k, p in prices.items():
-        if k.startswith(key) and (model.lower().split("-")[0] in k or any(w in model.lower() for w in k.split(":")[1].split("-"))):
-            matched = p
-            break
+        if k.startswith(key):
+            pattern = k.split(":", 1)[1] if ":" in k else ""
+            if pattern and pattern in model_lower:
+                matched = p
+                break
+
+    # 降级：按 provider 匹配第一个
     if not matched:
         for k, p in prices.items():
             if k.startswith(key):
                 matched = p
                 break
+
+    # 兜底默认价格
     if not matched:
         matched = {"input": 2.0, "output": 8.0, "cache_read": 2.0}
 

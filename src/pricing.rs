@@ -191,4 +191,39 @@ mod tests {
         let r2 = calculate_saving("anthropic", "claude-haiku-4-5", 1000, 100, 0, 0, &cfg);
         assert!(r2.actual_cost_cents > 0.0);
     }
+
+    #[test]
+    fn test_high_cache_hit_rate() {
+        let cfg = test_config();
+        // 90% of input cached → should have high saving rate
+        let result = calculate_saving("deepseek", "deepseek-v4-flash", 10000, 100, 9000, 0, &cfg);
+        assert!(result.saving_rate > 50.0, "90% cache hit should save >50%");
+    }
+
+    #[test]
+    fn test_cache_write_more_expensive_than_no_cache() {
+        let cfg = test_config();
+        // Cache write costs more than uncached input
+        let result = calculate_saving("openai", "gpt-4o", 1000, 0, 0, 1000, &cfg);
+        assert!(result.saving_cents < 0.0, "Cache write should cost more initially");
+        assert!(result.saving_rate < 0.0, "Cache write should have negative saving rate");
+    }
+
+    #[test]
+    fn test_mixed_cache_and_uncached() {
+        let cfg = test_config();
+        // Half cached, half not
+        let result = calculate_saving("anthropic", "claude-sonnet-4-6", 2000, 100, 1000, 0, &cfg);
+        assert!(result.saving_cents > 0.0, "Partial cache should still save");
+        assert!(result.saving_rate > 20.0, "50% cache should save >20%");
+    }
+
+    #[test]
+    fn test_deepseek_v4_flash_pricing() {
+        let cfg = test_config();
+        let result = calculate_saving("deepseek", "deepseek-v4-flash", 10000, 1000, 9000, 0, &cfg);
+        assert!(result.actual_cost_cents > 0.0);
+        assert!(result.saving_cents > 0.0);
+        assert!(result.saving_rate > 50.0, "DeepSeek 90% cache hit should save >50%");
+    }
 }

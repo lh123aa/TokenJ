@@ -2,7 +2,7 @@
 import sqlite3
 import uuid
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DATA_DIR = Path.home() / ".tokenj"
@@ -47,7 +47,7 @@ samples = [
     ("openai", "gpt-4o", 3000, 200, 2800, 0, 0.02, 85.0),
 ]
 
-now = datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+now = datetime.now(timezone.utc).replace(tzinfo=None)
 for i, (prov, model, inp, out, cached, write, cost, rate) in enumerate(samples):
     ts = (now - timedelta(minutes=i * 5)).isoformat()
     saving = cost * rate / 100.0

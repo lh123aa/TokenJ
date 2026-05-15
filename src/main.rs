@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "tokenJ", version = "0.1.0", about = "Automatic LLM API cache optimizer - save up to 90% on API costs")]
+#[command(name = "tokenJ", version = "0.2.0", about = "Automatic LLM API cache optimizer - save up to 90% on API costs")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -19,7 +19,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the MITM proxy
+    /// Start the proxy (direct mode: set base_url in SDK)
     Proxy {
         /// Listen port
         #[arg(short, long, default_value = "9100")]
@@ -50,6 +50,9 @@ async fn main() -> Result<()> {
 async fn run_proxy(port: u16) -> Result<()> {
     let config = Arc::new(Config::load()?);
 
+    // 导出价格表供 Python MCP Server 使用
+    let _ = config.export_prices_json();
+
     // Ensure cert directory exists and generate CA cert
     let cert_manager = Arc::new(CertManager::load_or_create(&config.cert_dir)?);
     let _ = cert_manager.ca_cert_pem()?;
@@ -57,7 +60,8 @@ async fn run_proxy(port: u16) -> Result<()> {
     println!();
     println!("  ╔══════════════════════════════════════════════╗");
     println!("  ║        tokenJ — 自动缓存优化引擎            ║");
-    println!("  ║        装了就省钱，零配置                    ║");
+    println!("  ║        装了就省钱 · 零配置                   ║");
+    println!("  ║        当前模式: 直连模式                    ║");
     println!("  ╚══════════════════════════════════════════════╝");
     println!();
 
@@ -68,23 +72,28 @@ async fn run_proxy(port: u16) -> Result<()> {
     let (event_tx, _) = broadcast::channel::<ProxyEvent>(256);
 
     // Start proxy
-    let proxy = Proxy::new(config.clone(), db.clone(), event_tx.clone());
+    let proxy = Proxy::new(config.clone(), db.clone(), event_tx.clone(), cert_manager.clone());
     let running = Arc::new(AtomicBool::new(true));
 
-    println!("  Proxy running on: http://127.0.0.1:{}", port);
+    println!("  代理运行在: http://127.0.0.1:{}", port);
     println!();
-    println!("  Quick start:");
-    println!("    1. Install CA certificate:");
-    println!("       Windows: 双击 {}ca.crt → 安装到受信任的根证书颁发机构", cert_manager.cert_dir().display());
-    println!("       macOS:   sudo security add-trusted-cert -d -r trustRoot -k \\");
-    println!("                /Library/Keychains/System.keychain {}", cert_manager.cert_dir().display());
-    println!("                ca.crt");
+    println!("  📋 快速开始:");
     println!();
-    println!("    2. Set environment variable:");
-    println!("       export HTTPS_PROXY=http://127.0.0.1:{}", port);
+    println!("  方式 A — 直连模式（推荐，支持缓存注入 ✅）:");
+    println!("    修改 LLM SDK 的 base_url 指向本代理:");
+    println!("    OpenAI:    client = OpenAI(base_url=\"http://127.0.0.1:{}/v1\")", port);
+    println!("    Anthropic: client = Anthropic(base_url=\"http://127.0.0.1:{}\")", port);
+    println!("    DeepSeek:  client = DeepSeek(base_url=\"http://127.0.0.1:{}\")", port);
     println!();
-    println!("    3. Start using LLM APIs normally!");
-    println!("    4. Open dashboard: tokenJ dashboard");
+    println!("  方式 B — HTTPS_PROXY 模式（LLM 域名自动 MITM ✅ 非 LLM 透传）:");
+    println!("    export HTTPS_PROXY=http://127.0.0.1:{}", port);
+    println!("    LLM 域名(anthropic/openai/deepseek等)→自动 TLS 解密+缓存注入");
+    println!("    其他域名→透传隧道（不干预）");
+    println!();
+    println!("  💡 首次使用方式 B 需安装 CA 证书（见上方指引）");
+    println!();
+    println!("  📊 打开仪表盘: tokenJ dashboard");
+    println!("  🛑 按 Ctrl+C 停止代理");
     println!();
 
     // Update config with actual port

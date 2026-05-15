@@ -1,6 +1,6 @@
 [package]
 name = "tokenj"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Automatic LLM API cache optimizer - save up to 90% on API costs"
 
@@ -13,10 +13,12 @@ hyper = { version = "1", features = ["server", "client", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 rustls = "0.23"
-rcgen = { version = "0.13", features = ["pem"] }
+rustls-pki-types = "1"
+tokio-rustls = "0.26"
+rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
 
 # HTTP client for forwarding
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }

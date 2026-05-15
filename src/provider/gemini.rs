@@ -1,4 +1,4 @@
-use crate::provider::{CacheInjection, CacheResult};
+use crate::provider::{estimate_tokens, CacheInjection, CacheResult};
 use serde_json::Value;
 
 const MIN_CACHE_TOKENS: u64 = 32_768;
@@ -6,7 +6,7 @@ const MIN_CACHE_TOKENS: u64 = 32_768;
 pub fn inject(body: &mut Value) -> CacheInjection {
     let mut details = Vec::new();
 
-    let total_tokens = estimate_tokens(body);
+    let total_tokens = estimate_prompt_tokens(body);
     if total_tokens < MIN_CACHE_TOKENS {
         details.push(format!(
             "Gemini context too short for caching: ~{} tokens < {}",
@@ -32,21 +32,21 @@ pub fn parse_cache(_body: &Value) -> CacheResult {
     }
 }
 
-fn estimate_tokens(body: &Value) -> u64 {
+fn estimate_prompt_tokens(body: &Value) -> u64 {
     let mut total = 0u64;
     if let Some(contents) = body.get("contents").and_then(|v| v.as_array()) {
         for content in contents {
             if let Some(parts) = content.get("parts").and_then(|v| v.as_array()) {
                 for part in parts {
                     if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
-                        total += (text.len() / 4) as u64;
+                        total += estimate_tokens(text);
                     }
                 }
             }
         }
     }
     if let Some(system) = body.get("system_instruction").and_then(|v| v.as_str()) {
-        total += (system.len() / 4) as u64;
+        total += estimate_tokens(system);
     }
     total
 }

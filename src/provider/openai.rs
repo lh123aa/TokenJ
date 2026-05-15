@@ -1,4 +1,4 @@
-use crate::provider::{CacheInjection, CacheResult};
+use crate::provider::{estimate_tokens, CacheInjection, CacheResult};
 use serde_json::Value;
 
 const MIN_CACHE_TOKENS: u64 = 1024;
@@ -57,7 +57,7 @@ fn estimate_prompt_tokens(body: &Value) -> u64 {
     }
 
     if let Some(system) = body.get("system").and_then(|v| v.as_str()) {
-        total += (system.len() / 4) as u64;
+        total += estimate_tokens(system);
     }
 
     total
@@ -65,11 +65,11 @@ fn estimate_prompt_tokens(body: &Value) -> u64 {
 
 fn estimate_content_tokens(value: &Value) -> u64 {
     match value {
-        Value::String(s) => (s.len() / 4) as u64,
+        Value::String(s) => estimate_tokens(s),
         Value::Array(arr) => arr.iter().map(|v| estimate_content_tokens(v)).sum(),
         Value::Object(map) => {
             if let Some(text) = map.get("text").and_then(|v| v.as_str()) {
-                (text.len() / 4) as u64
+                estimate_tokens(text)
             } else {
                 0
             }

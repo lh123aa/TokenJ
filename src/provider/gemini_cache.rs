@@ -15,6 +15,7 @@ use std::time::Duration;
 
 const MIN_CACHE_TOKENS: u64 = 32_768;
 
+#[derive(Clone)]
 struct CacheEntry {
     cache_name: String,
 }
@@ -22,23 +23,47 @@ struct CacheEntry {
 /// Gemini 上下文缓存管理器
 pub struct GeminiCacheStore {
     caches: Mutex<HashMap<String, CacheEntry>>,
+    http_client: reqwest::blocking::Client,
+}
+
+impl Clone for GeminiCacheStore {
+    fn clone(&self) -> Self {
+        // reqwest::blocking::Client 内部用 Arc 共享连接池，clone 很轻量
+        // 缓存状态用新的 Mutex 隔离，避免锁竞争
+        Self {
+            caches: Mutex::new(self.caches.lock().expect("gemini cache poisoned").clone()),
+            http_client: self.http_client.clone(),
+        }
+    }
 }
 
 impl GeminiCacheStore {
     pub fn new() -> Self {
+        let http_client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .pool_max_idle_per_host(4)
+            .build()
+            .expect("Failed to build Gemini HTTP client");
         Self {
             caches: Mutex::new(HashMap::new()),
+            http_client,
         }
     }
 
     /// 计算请求体内容的缓存哈希
+    /// 使用 serde_json::to_string 将 content 字段序列化为紧凑 JSON 再哈希
     pub fn compute_hash(body: &Value) -> String {
+        use std::io::Write;
         let mut hasher = Sha256::new();
         if let Some(contents) = body.get("contents") {
-            hasher.update(contents.to_string().as_bytes());
+            if let Ok(json) = serde_json::to_string(contents) {
+                let _ = hasher.write(json.as_bytes());
+            }
         }
         if let Some(system) = body.get("system_instruction") {
-            hasher.update(system.to_string().as_bytes());
+            if let Ok(json) = serde_json::to_string(system) {
+                let _ = hasher.write(json.as_bytes());
+            }
         }
         let result = hasher.finalize();
         hex::encode(&result[..8])
@@ -108,7 +133,7 @@ pub fn handle_gemini_request(
     }
 
     // 缓存未命中 → 尝试创建缓存（通过 HTTP 调用）
-    match create_cached_content(body, api_key, model) {
+    match create_cached_content(body, api_key, model, &cache_store.http_client) {
         Ok(cache_name) => {
             cache_store.set_cache(content_hash.clone(), cache_name.clone());
             // 首次创建后，当前请求仍然使用缓存
@@ -136,7 +161,7 @@ pub fn handle_gemini_request(
 }
 
 /// 调用 Gemini Context Cache API 创建缓存
-fn create_cached_content(body: &Value, api_key: &str, model: &str) -> Result<String, String> {
+fn create_cached_content(body: &Value, api_key: &str, model: &str, client: &reqwest::blocking::Client) -> Result<String, String> {
     // 构建缓存的请求体
     let mut cache_body = serde_json::Map::new();
 
@@ -164,12 +189,6 @@ fn create_cached_content(body: &Value, api_key: &str, model: &str) -> Result<Str
         "https://generativelanguage.googleapis.com/v1beta/cachedContents?key={}",
         api_key
     );
-
-    // 同步 HTTP 请求（在 async 上下文中由调用方处理）
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     let resp = client
         .post(&url)

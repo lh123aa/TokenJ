@@ -239,10 +239,11 @@ impl Proxy {
         stream: tokio::net::TcpStream,
         host: &str,
     ) -> Result<()> {
-        // 1. 使用 CA 证书动态签发目标域名证书
+        // 1. 使用 CA 证书动态签发目标域名证书（异步生成，不阻塞 tokio 线程）
         let (cert_pem, key_pem) = self
             .cert_manager
-            .get_or_create_domain_cert_pem(host)
+            .get_or_create_domain_cert_pem_async(host)
+            .await
             .map_err(|e| {
                 warn!("Failed to generate cert for {}: {}", host, e);
                 e
@@ -459,50 +460,63 @@ impl Proxy {
         self,
         req: Request<Incoming>,
     ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-        // 直连模式下客户端发 origin-form 请求 (如 GET /v1/messages)，
-        // req.uri().host() 为空，需从 Host header 获取目标服务器
-        let host = req
-            .uri()
-            .host()
-            .map(|s| s.to_string())
-            .or_else(|| {
-                req.headers()
-                    .get("host")
-                    .and_then(|v| v.to_str().ok())
-                    .map(|s| {
-                        // Host header 可能包含端口号 (如 "api.anthropic.com:443")，去掉端口
-                        s.split(':').next().unwrap_or(s).to_string()
-                    })
-            })
-            .unwrap_or_default();
+        // 直连模式下客户端把代理当目标服务器发请求，URI 地址是代理本身。
+        // 目标服务器地址必须从 Host header 获取（方式 A 的标准做法）。
+        // 若 URI 中带有绝对路径的 host（如 GET http://api.deepseek.com/...），
+        // 也优先使用它（兼容某些 SDK 的透传模式）。
+        let uri_host = req.uri().host().map(|s| s.to_string());
+        let header_host = req
+            .headers()
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(':').next().unwrap_or(s).to_string());
+
+        // 如果 URI host 不是本地回环地址，说明 SDK 直接设置了目标 host（兼容模式）
+        // 否则用 Host header（标准直连模式）
+        let host = match &uri_host {
+            Some(h) if h != "127.0.0.1" && h != "localhost" && h != "0.0.0.0" => h.clone(),
+            _ => header_host.unwrap_or_default(),
+        };
+
         let provider = Provider::from_host(&host);
 
         // Read body
         let (parts, body) = req.into_parts();
         let body_bytes = body.collect().await.map(|b| b.to_bytes()).unwrap_or_default();
 
-        // Inject cache headers (with Gemini support)
+        // 快速判断：只有需要注入的 Provider 才解析 JSON，其他直接透传
+        let needs_json_processing = matches!(provider,
+            Provider::Anthropic | Provider::OpenAI | Provider::Gemini
+        );
+
         let mut json_body: Option<serde_json::Value> = None;
-        let injection = if let Ok(mut val) =
-            serde_json::from_slice::<serde_json::Value>(&body_bytes)
-        {
-            if provider == Provider::Gemini {
-                let api_key = GeminiCacheStore::extract_api_key(
-                    &parts.uri.to_string()
-                ).unwrap_or_default();
-                let model = val.get("model")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                let result = crate::provider::gemini_cache::handle_gemini_request(
-                    &mut val, &api_key, &model, &self.gemini_cache
-                );
-                json_body = Some(val);
-                result
+        let injection = if needs_json_processing {
+            if let Ok(mut val) =
+                serde_json::from_slice::<serde_json::Value>(&body_bytes)
+            {
+                if provider == Provider::Gemini {
+                    let api_key = GeminiCacheStore::extract_api_key(
+                        &parts.uri.to_string()
+                    ).unwrap_or_default();
+                    let model = val.get("model")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let result = crate::provider::gemini_cache::handle_gemini_request(
+                        &mut val, &api_key, &model, &self.gemini_cache
+                    );
+                    json_body = Some(val);
+                    result
+                } else {
+                    let result = provider::inject_cache_headers(&provider, &mut val);
+                    json_body = Some(val);
+                    result
+                }
             } else {
-                let result = provider::inject_cache_headers(&provider, &mut val);
-                json_body = Some(val);
-                result
+                provider::CacheInjection {
+                    injected: false,
+                    details: vec![],
+                }
             }
         } else {
             provider::CacheInjection {
@@ -510,7 +524,6 @@ impl Proxy {
                 details: vec![],
             }
         };
-
         let final_body = if let Some(ref val) = json_body {
             serde_json::to_vec(val).unwrap_or(body_bytes.to_vec())
         } else {
@@ -634,7 +647,7 @@ impl Clone for Proxy {
             db: self.db.clone(),
             cert_manager: self.cert_manager.clone(),
             event_tx: self.event_tx.clone(),
-            gemini_cache: GeminiCacheStore::new(),
+            gemini_cache: self.gemini_cache.clone(), // 共享 Gemini HTTP Client
             http_client: self.http_client.clone(), // reqwest::Client 用 Arc 内部共享
         }
     }

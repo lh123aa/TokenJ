@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose};
+use std::sync::Arc;
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -88,6 +89,7 @@ impl CertManager {
     /// 为指定域名获取或创建证书，返回 PEM 格式的证书和私钥
     ///
     /// 缓存采用 LRU 策略，超过 {MAX_CACHED_DOMAINS} 个域名时淘汰最久未访问的条目。
+    /// 同步版本，适用于 spawn_blocking 或测试环境。
     pub fn get_or_create_domain_cert_pem(&self, domain: &str) -> Result<(String, String)> {
         let mut cache = self.issued.lock().expect("cert cache poisoned");
         let mut order = self.access_order.lock().expect("access order poisoned");
@@ -107,8 +109,11 @@ impl CertManager {
                 cache.remove(&oldest);
             }
         }
+        // 释放锁，证书生成移到 spawn_blocking 中处理
+        drop(cache);
+        drop(order);
 
-        // 签发新域名证书
+        // 签发新域名证书（CPU 密集型，在 async 调用方应在 spawn_blocking 中执行）
         let domain_key = KeyPair::generate()?;
         let domain_cert_params = CertificateParams::new(vec![domain.to_string()])
             .context("Failed to create domain certificate params")?;
@@ -120,10 +125,27 @@ impl CertManager {
         let cert_pem = domain_cert.pem();
         let key_pem = domain_key.serialize_pem();
 
+        // 重新获取锁并缓存
+        let mut cache = self.issued.lock().expect("cert cache poisoned");
+        let mut order = self.access_order.lock().expect("access order poisoned");
         cache.insert(domain.to_string(), (domain_cert, domain_key));
         order.push_back(domain.to_string());
 
         Ok((cert_pem, key_pem))
+    }
+
+    /// 异步版本：在 spawn_blocking 中执行证书生成，不阻塞 tokio 工作线程
+    pub async fn get_or_create_domain_cert_pem_async(
+        self: &Arc<Self>,
+        domain: &str,
+    ) -> Result<(String, String)> {
+        let self_clone = self.clone();
+        let domain = domain.to_string();
+        tokio::task::spawn_blocking(move || {
+            self_clone.get_or_create_domain_cert_pem(&domain)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("spawn_blocking panicked: {}", e))?
     }
 
     /// 获取 CA 证书 PEM

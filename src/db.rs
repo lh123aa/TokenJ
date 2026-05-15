@@ -99,19 +99,19 @@ impl Database {
     /// 插入请求记录
     pub fn insert_request(&self, record: &RequestRecord) -> Result<()> {
         let conn = self.conn.lock().expect("Database mutex poisoned");
-        conn.execute(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO requests (id, session_id, provider, model, input_tokens, output_tokens,
              cached_tokens, cache_write_tokens, actual_cost_cents, saving_cents, saving_rate,
              cache_injected, duration_ms, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            params![
-                record.id, record.session_id, record.provider, record.model,
-                record.input_tokens, record.output_tokens, record.cached_tokens,
-                record.cache_write_tokens, record.actual_cost_cents, record.saving_cents,
-                record.saving_rate, record.cache_injected as i32, record.duration_ms,
-                record.created_at,
-            ],
         )?;
+        stmt.execute(params![
+            record.id, record.session_id, record.provider, record.model,
+            record.input_tokens, record.output_tokens, record.cached_tokens,
+            record.cache_write_tokens, record.actual_cost_cents, record.saving_cents,
+            record.saving_rate, record.cache_injected as i32, record.duration_ms,
+            record.created_at,
+        ])?;
         Ok(())
     }
 
@@ -119,26 +119,26 @@ impl Database {
         let id = Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         let conn = self.conn.lock().expect("Database mutex poisoned in create_session");
-        conn.execute(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO sessions (id, start_time) VALUES (?1, ?2)",
-            params![id, now],
         )?;
+        stmt.execute(params![id, now])?;
         Ok(id)
     }
 
     pub fn end_session(&self, session_id: &str) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
         let conn = self.conn.lock().expect("Mutex poisoned in end_session");
-        conn.execute(
+        let mut stmt = conn.prepare_cached(
             "UPDATE sessions SET end_time = ?1 WHERE id = ?2",
-            params![now, session_id],
         )?;
+        stmt.execute(params![now, session_id])?;
         Ok(())
     }
 
     pub fn get_stats_since(&self, since: &str) -> Result<SessionStats> {
         let conn = self.conn.lock().expect("Mutex poisoned in get_stats_since");
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT
                 COUNT(*) as total_requests,
                 COALESCE(SUM(actual_cost_cents), 0) as total_cost,
@@ -175,7 +175,7 @@ impl Database {
 
     pub fn get_recent_requests(&self, limit: u64) -> Result<Vec<RequestRecord>> {
         let conn = self.conn.lock().expect("Mutex poisoned in get_recent_requests");
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT id, session_id, provider, model, input_tokens, output_tokens,
              cached_tokens, cache_write_tokens, actual_cost_cents, saving_cents, saving_rate,
              cache_injected, duration_ms, created_at

@@ -17,6 +17,7 @@ pub struct PriceConfig {
     pub anthropic: Vec<ModelPrice>,
     pub openai: Vec<ModelPrice>,
     pub deepseek: Vec<ModelPrice>,
+    #[serde(default)]
     pub gemini: Vec<ModelPrice>,
 }
 
@@ -64,9 +65,7 @@ impl PriceConfig {
             match std::fs::read_to_string(prices_path) {
                 Ok(content) => {
                     if let Ok(entries) = serde_json::from_str::<Vec<FlatPriceEntry>>(&content) {
-                        let mut config = Self::default();
-                        config.merge_flat_entries(&entries);
-                        return config;
+                    return Self::from_flat_entries(&entries);
                     }
                 }
                 Err(_) => {}
@@ -75,8 +74,14 @@ impl PriceConfig {
         Self::default()
     }
 
-    /// 将扁平化价格条目合并到结构化 PriceConfig 中
-    fn merge_flat_entries(&mut self, entries: &[FlatPriceEntry]) {
+    /// 从扁平化价格条目构建 PriceConfig（清空默认值，完全从文件加载）
+    fn from_flat_entries(entries: &[FlatPriceEntry]) -> Self {
+        let mut config = Self {
+            anthropic: Vec::new(),
+            openai: Vec::new(),
+            deepseek: Vec::new(),
+            gemini: Vec::new(),
+        };
         for entry in entries {
             let parts: Vec<&str> = entry.key.splitn(2, ':').collect();
             if parts.len() != 2 {
@@ -93,13 +98,14 @@ impl PriceConfig {
                 cache_read_per_mtok: entry.cache_read_per_mtok,
             };
             match provider {
-                "anthropic" => self.anthropic.push(mp),
-                "openai" => self.openai.push(mp),
-                "deepseek" => self.deepseek.push(mp),
-                "gemini" => self.gemini.push(mp),
+                "anthropic" => config.anthropic.push(mp),
+                "openai" => config.openai.push(mp),
+                "deepseek" => config.deepseek.push(mp),
+                "gemini" => config.gemini.push(mp),
                 _ => {}
             }
         }
+        config
     }
 
     /// 导出为扁平化价格条目列表（供 Python MCP Server 和外部 prices.json 使用）

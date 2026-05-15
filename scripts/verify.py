@@ -1,8 +1,8 @@
-"""Quick verification script for tokenJ"""
+"""Quick verification script for TokenJ"""
 import json, sys
 from pathlib import Path
 sys.path.insert(0, 'scripts')
-from tokenj_mcp_server import get_stats, get_repeats, get_history, estimate_savings
+from TokenJ_mcp_server import get_stats, get_repeats, get_history, estimate_savings
 
 print('=== get_stats ===')
 s = json.loads(get_stats(365))
@@ -32,7 +32,7 @@ print(f'  年省: ${e["yearly_saving_dollars"]}')
 
 print()
 print('=== verify prices.json ===')
-prices_path = Path.home() / '.tokenj' / 'prices.json'
+prices_path = Path.home() / '.TokenJ' / 'prices.json'
 if prices_path.exists():
     with open(prices_path) as f:
         prices = json.load(f)
@@ -43,4 +43,4 @@ else:
     print('  prices.json not found')
 
 print()
-print('✅ tokenJ 全链路验证通过!')
+print('✅ TokenJ 全链路验证通过!')

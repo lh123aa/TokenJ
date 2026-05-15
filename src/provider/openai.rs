@@ -98,7 +98,7 @@ fn generate_cache_key(body: &Value) -> Option<String> {
     let hash = hasher.finalize();
     let hash_hex = hex::encode(&hash[..4]);
 
-    Some(format!("tokenj-{}", hash_hex))
+    Some(format!("TokenJ-{}", hash_hex))
 }
 
 #[cfg(test)]
@@ -118,7 +118,7 @@ mod tests {
         let result = inject(&mut body);
         assert!(result.injected, "Should inject prompt_cache_key on long prompt");
         assert!(body.get("prompt_cache_key").is_some(), "prompt_cache_key should be present");
-        assert!(body["prompt_cache_key"].as_str().unwrap().starts_with("tokenj-"));
+        assert!(body["prompt_cache_key"].as_str().unwrap().starts_with("TokenJ-"));
     }
 
     #[test]

@@ -1,10 +1,10 @@
 """
-tokenJ MCP Server - 直接在 Trae IDE 中使用 tokenJ 的 Token 分析功能
+TokenJ MCP Server - 直接在 Trae IDE 中使用 TokenJ 的 Token 分析功能
 
 安装: pip install mcp
-运行: python scripts/tokenj_mcp_server.py
+运行: python scripts/TokenJ_mcp_server.py
 配置: 在 Trae 设置中添加 MCP Server:
-      "tokenj": { "command": "python", "args": ["scripts/tokenj_mcp_server.py"] }
+      "TokenJ": { "command": "python", "args": ["scripts/TokenJ_mcp_server.py"] }
 """
 import json
 import os
@@ -13,11 +13,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
-DATA_DIR = Path(os.path.expanduser("~/.tokenj"))
+DATA_DIR = Path(os.path.expanduser("~/.TokenJ"))
 DB_PATH = DATA_DIR / "data.db"
 
-mcp = FastMCP("tokenj", instructions="""
-tokenJ - LLM API 缓存优化引擎
+mcp = FastMCP("TokenJ", instructions="""
+TokenJ - LLM API 缓存优化引擎
 
 自动分析 LLM API 调用的 Token 消耗、缓存命中率、节省金额。
 通过在 LLM 请求中自动注入 cache_control 标记，让 API 提供商启用缓存折扣。

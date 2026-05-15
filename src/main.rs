@@ -2,11 +2,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokenj::cert::CertManager;
-use tokenj::config::Config;
-use tokenj::dashboard;
-use tokenj::db::Database;
-use tokenj::proxy::{Proxy, ProxyEvent};
+use TokenJ::cert::CertManager;
+use TokenJ::config::Config;
+use TokenJ::dashboard;
+use TokenJ::db::Database;
+use TokenJ::proxy::{Proxy, ProxyEvent};
 use tokio::sync::broadcast;
 use tracing_subscriber::EnvFilter;
 
@@ -25,8 +25,12 @@ enum Commands {
         #[arg(short, long, default_value = "9100")]
         port: u16,
     },
-    /// Start the TUI dashboard
-    Dashboard,
+    /// Start the TUI dashboard (use --json for non-interactive mode)
+    Dashboard {
+        /// Output JSON stats to stdout instead of launching TUI
+        #[arg(long)]
+        json: bool,
+    },
     /// Run demo with sample data
     Demo,
 }
@@ -42,13 +46,22 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Proxy { port } => run_proxy(port).await,
-        Commands::Dashboard => run_dashboard_mode().await,
+        Commands::Dashboard { json } => {
+            if json {
+                run_dashboard_json().await
+            } else {
+                run_dashboard_mode().await
+            }
+        }
         Commands::Demo => run_demo().await,
     }
 }
 
 async fn run_proxy(port: u16) -> Result<()> {
-    let config = Arc::new(Config::load()?);
+    // 加载配置，并用 CLI 传入的端口覆盖
+    let mut cfg = Config::load()?;
+    cfg.port = port;
+    let config = Arc::new(cfg);
 
     // 导出价格表供 Python MCP Server 使用
     let _ = config.export_prices_json();
@@ -96,11 +109,15 @@ async fn run_proxy(port: u16) -> Result<()> {
     println!("  🛑 按 Ctrl+C 停止代理");
     println!();
 
-    // Update config with actual port
-    let mut cfg = Config::load()?;
-    if cfg.port != port {
-        cfg.port = port;
-        let _ = cfg.save();
+    // 检查 CA 证书是否存在，引导用户安装（方式 B 需要）
+    let ca_path = config.cert_dir.join("ca.crt");
+    if ca_path.exists() {
+        println!("  🔐 CA 证书路径: {}", ca_path.display());
+        println!("  📖 方式 B 需要安装此证书到系统信任存储:");
+        println!("     Windows: 双击 ca.crt → 安装到「受信任的根证书颁发机构」");
+        println!("     macOS:    sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain {}", ca_path.display());
+        println!("     Linux:    sudo cp {} /usr/local/share/ca-certificates/ && sudo update-ca-certificates", ca_path.display());
+        println!();
     }
 
     // Start dashboard in background if possible
@@ -134,6 +151,7 @@ async fn run_proxy(port: u16) -> Result<()> {
 
 async fn run_dashboard_mode() -> Result<()> {
     let config = Arc::new(Config::load()?);
+    let _ = config.export_prices_json();
     let db = Arc::new(Database::new(&config.db_path)?);
     let (_event_tx, event_rx) = broadcast::channel::<ProxyEvent>(256);
     let running = Arc::new(AtomicBool::new(true));
@@ -141,8 +159,30 @@ async fn run_dashboard_mode() -> Result<()> {
     dashboard::run_dashboard(db, event_rx, running).await
 }
 
+/// --json 模式：不启动 TUI，直接输出 JSON 统计到 stdout
+async fn run_dashboard_json() -> Result<()> {
+    let config = Arc::new(Config::load()?);
+    let db = Arc::new(Database::new(&config.db_path)?);
+
+    let stats = db.get_stats_since("1970-01-01")?;
+    let output = serde_json::json!({
+        "total_requests": stats.total_requests,
+        "total_cost_dollars": (stats.total_cost_cents / 100.0 * 100.0).round() / 100.0,
+        "total_saving_dollars": (stats.total_saving_cents / 100.0 * 100.0).round() / 100.0,
+        "cache_hit_rate": (stats.cache_hit_rate * 100.0).round() / 100.0,
+        "avg_saving_rate": (stats.avg_saving_rate * 100.0).round() / 100.0,
+        "total_input_tokens": stats.total_input_tokens,
+        "total_output_tokens": stats.total_output_tokens,
+        "total_cached_tokens": stats.total_cached_tokens,
+    });
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
 async fn run_demo() -> Result<()> {
     let config = Arc::new(Config::load()?);
+    // 导出价格表供 Python MCP Server 使用
+    let _ = config.export_prices_json();
     let db = Arc::new(Database::new(&config.db_path)?);
     let (event_tx, event_rx) = broadcast::channel::<ProxyEvent>(256);
     let running = Arc::new(AtomicBool::new(true));
@@ -162,7 +202,7 @@ async fn run_demo() -> Result<()> {
     ];
 
     for (provider, model, input, output, cached, write, cost, rate) in &sample_data {
-        let rec = tokenj::db::RequestRecord {
+        let rec = TokenJ::db::RequestRecord {
             id: uuid::Uuid::new_v4().to_string(),
             session_id: "demo".into(),
             provider: provider.to_string(),

@@ -1,9 +1,12 @@
 use anyhow::{Context, Result};
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+
+/// 内存中缓存的最大域名证书数量，超过时淘汰最久未使用的
+const MAX_CACHED_DOMAINS: usize = 100;
 
 /// 证书管理器：管理 CA 证书 + 动态签发域名证书
 ///
@@ -11,13 +14,15 @@ use std::sync::Mutex;
 /// - 首次启动自动生成 CA 根证书
 /// - 后续启动加载已有的 CA 证书
 /// - 为 MITM 代理动态签发目标域名证书
-/// - 缓存已签发的域名证书
+/// - 缓存已签发的域名证书（LRU 淘汰，上限 {MAX_CACHED_DOMAINS}）
 pub struct CertManager {
     cert_dir: PathBuf,
     ca_cert: Certificate,
     ca_key: KeyPair,
     /// 域名证书缓存: domain -> (cert, key)
     issued: Mutex<HashMap<String, (Certificate, KeyPair)>>,
+    /// 访问顺序记录，用于 LRU 淘汰
+    access_order: Mutex<VecDeque<String>>,
 }
 
 impl CertManager {
@@ -58,6 +63,7 @@ impl CertManager {
             ca_cert,
             ca_key,
             issued: Mutex::new(HashMap::new()),
+            access_order: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -80,15 +86,30 @@ impl CertManager {
     }
 
     /// 为指定域名获取或创建证书，返回 PEM 格式的证书和私钥
+    ///
+    /// 缓存采用 LRU 策略，超过 {MAX_CACHED_DOMAINS} 个域名时淘汰最久未访问的条目。
     pub fn get_or_create_domain_cert_pem(&self, domain: &str) -> Result<(String, String)> {
         let mut cache = self.issued.lock().expect("cert cache poisoned");
+        let mut order = self.access_order.lock().expect("access order poisoned");
 
+        // 缓存命中：更新访问顺序（移到末尾）
         if let Some((cert, key)) = cache.get(domain) {
+            if let Some(pos) = order.iter().position(|d| d == domain) {
+                order.remove(pos);
+                order.push_back(domain.to_string());
+            }
             return Ok((cert.pem(), key.serialize_pem()));
         }
 
+        // 缓存未命中：若已满，淘汰最久未访问的条目
+        if cache.len() >= MAX_CACHED_DOMAINS {
+            if let Some(oldest) = order.pop_front() {
+                cache.remove(&oldest);
+            }
+        }
+
+        // 签发新域名证书
         let domain_key = KeyPair::generate()?;
-        // 使用 CertificateParams::new() 接受 Vec<String> 作为 SAN
         let domain_cert_params = CertificateParams::new(vec![domain.to_string()])
             .context("Failed to create domain certificate params")?;
 
@@ -100,6 +121,7 @@ impl CertManager {
         let key_pem = domain_key.serialize_pem();
 
         cache.insert(domain.to_string(), (domain_cert, domain_key));
+        order.push_back(domain.to_string());
 
         Ok((cert_pem, key_pem))
     }
@@ -121,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_load_or_create_generates_ca() {
-        let dir = std::env::temp_dir().join(format!("tokenj_test_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mgr = CertManager::load_or_create(&dir).unwrap();
         let pem = mgr.ca_cert_pem().unwrap();
@@ -131,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_load_or_create_reuses_existing_ca_key() {
-        let dir = std::env::temp_dir().join(format!("tokenj_test_ca_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_test_ca_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
         let mgr1 = CertManager::load_or_create(&dir).unwrap();
@@ -154,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_domain_cert_generation() {
-        let dir = std::env::temp_dir().join(format!("tokenj_test_domain_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_test_domain_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mgr = CertManager::load_or_create(&dir).unwrap();
 
@@ -169,7 +191,7 @@ mod tests {
 
     #[test]
     fn test_domain_cert_caching() {
-        let dir = std::env::temp_dir().join(format!("tokenj_test_cache_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_test_cache_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mgr = CertManager::load_or_create(&dir).unwrap();
 
@@ -186,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_multiple_domains() {
-        let dir = std::env::temp_dir().join(format!("tokenj_test_multi_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_test_multi_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mgr = CertManager::load_or_create(&dir).unwrap();
 

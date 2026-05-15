@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -17,6 +17,7 @@ pub struct PriceConfig {
     pub anthropic: Vec<ModelPrice>,
     pub openai: Vec<ModelPrice>,
     pub deepseek: Vec<ModelPrice>,
+    pub gemini: Vec<ModelPrice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +47,84 @@ impl Default for Config {
     }
 }
 
+/// 外部 prices.json 中的扁平化价格条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlatPriceEntry {
+    pub key: String,
+    pub input_per_mtok: f64,
+    pub output_per_mtok: f64,
+    pub cache_write_per_mtok: f64,
+    pub cache_read_per_mtok: f64,
+}
+
 impl PriceConfig {
+    /// 从外部 prices.json 加载价格表；若文件不存在或格式错误则回退到编译期默认值
+    pub fn load(prices_path: &Path) -> Self {
+        if prices_path.exists() {
+            match std::fs::read_to_string(prices_path) {
+                Ok(content) => {
+                    if let Ok(entries) = serde_json::from_str::<Vec<FlatPriceEntry>>(&content) {
+                        let mut config = Self::default();
+                        config.merge_flat_entries(&entries);
+                        return config;
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        Self::default()
+    }
+
+    /// 将扁平化价格条目合并到结构化 PriceConfig 中
+    fn merge_flat_entries(&mut self, entries: &[FlatPriceEntry]) {
+        for entry in entries {
+            let parts: Vec<&str> = entry.key.splitn(2, ':').collect();
+            if parts.len() != 2 {
+                continue;
+            }
+            let provider = parts[0];
+            let pattern = parts[1];
+            let mp = ModelPrice {
+                model: pattern.to_string(),
+                pattern: pattern.to_string(),
+                input_per_mtok: entry.input_per_mtok,
+                output_per_mtok: entry.output_per_mtok,
+                cache_write_per_mtok: entry.cache_write_per_mtok,
+                cache_read_per_mtok: entry.cache_read_per_mtok,
+            };
+            match provider {
+                "anthropic" => self.anthropic.push(mp),
+                "openai" => self.openai.push(mp),
+                "deepseek" => self.deepseek.push(mp),
+                "gemini" => self.gemini.push(mp),
+                _ => {}
+            }
+        }
+    }
+
+    /// 导出为扁平化价格条目列表（供 Python MCP Server 和外部 prices.json 使用）
+    pub fn to_flat_entries(&self) -> Vec<FlatPriceEntry> {
+        let mut entries = Vec::new();
+        let provider_groups: [(&str, &[ModelPrice]); 4] = [
+            ("anthropic", &self.anthropic),
+            ("openai", &self.openai),
+            ("deepseek", &self.deepseek),
+            ("gemini", &self.gemini),
+        ];
+        for (provider, prices) in provider_groups.into_iter() {
+            for p in prices {
+                entries.push(FlatPriceEntry {
+                    key: format!("{}:{}", provider, p.pattern),
+                    input_per_mtok: p.input_per_mtok,
+                    output_per_mtok: p.output_per_mtok,
+                    cache_write_per_mtok: p.cache_write_per_mtok,
+                    cache_read_per_mtok: p.cache_read_per_mtok,
+                });
+            }
+        }
+        entries
+    }
+
     pub fn default() -> Self {
         Self {
             anthropic: vec![
@@ -119,43 +197,65 @@ impl PriceConfig {
                     cache_read_per_mtok: 0.028,
                 },
             ],
+            gemini: vec![
+                ModelPrice {
+                    model: "gemini-2.5-pro".into(),
+                    pattern: "gemini-2.5-pro".into(),
+                    input_per_mtok: 1.25,
+                    output_per_mtok: 5.0,
+                    cache_write_per_mtok: 1.25,
+                    cache_read_per_mtok: 0.3125,
+                },
+                ModelPrice {
+                    model: "gemini-2.5-flash".into(),
+                    pattern: "gemini-2.5-flash".into(),
+                    input_per_mtok: 0.15,
+                    output_per_mtok: 0.60,
+                    cache_write_per_mtok: 0.15,
+                    cache_read_per_mtok: 0.0375,
+                },
+                ModelPrice {
+                    model: "gemini-2.0-flash".into(),
+                    pattern: "gemini-2.0-flash".into(),
+                    input_per_mtok: 0.10,
+                    output_per_mtok: 0.40,
+                    cache_write_per_mtok: 0.10,
+                    cache_read_per_mtok: 0.025,
+                },
+            ],
         }
     }
 }
 
 fn dirs_data_dir() -> PathBuf {
-    // 统一使用 ~/.tokenj 目录，与 Python MCP Server 保持一致
+    // 统一使用 ~/.TokenJ 目录，与 Python MCP Server 保持一致
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".tokenj")
-}
-
-/// Python MCP Server 友好的价格格式
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlatPriceEntry {
-    pub key: String,
-    pub input_per_mtok: f64,
-    pub output_per_mtok: f64,
-    pub cache_write_per_mtok: f64,
-    pub cache_read_per_mtok: f64,
+    PathBuf::from(home).join(".TokenJ")
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
         let data_dir = dirs_data_dir();
         let config_path = data_dir.join("config.json");
+        let prices_path = data_dir.join("prices.json");
 
-        if config_path.exists() {
+        let mut cfg = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let mut cfg: Config = serde_json::from_str(&content)?;
-            cfg.data_dir = data_dir.clone();
-            cfg.cert_dir = data_dir.join("certs");
-            cfg.db_path = data_dir.join("data.db");
-            Ok(cfg)
+            let mut c: Config = serde_json::from_str(&content)?;
+            c.data_dir = data_dir.clone();
+            c.cert_dir = data_dir.join("certs");
+            c.db_path = data_dir.join("data.db");
+            c
         } else {
-            Ok(Config::default())
-        }
+            Config::default()
+        };
+
+        // 从外部 prices.json 加载价格（若存在），覆盖编译期默认值
+        cfg.prices = PriceConfig::load(&prices_path);
+
+        Ok(cfg)
     }
 
     pub fn save(&self) -> Result<()> {
@@ -166,41 +266,12 @@ impl Config {
         Ok(())
     }
 
-    /// 导出 Python MCP Server 可读取的扁平化价格表
+    /// 导出 Python MCP Server 可读取的扁平化价格表（也作为 Rust 端的持久化来源）
     pub fn export_prices_json(&self) -> Result<()> {
         std::fs::create_dir_all(&self.data_dir)
             .context("Failed to create data directory")?;
         let prices_path = self.data_dir.join("prices.json");
-        let mut entries = Vec::new();
-
-        for p in &self.prices.anthropic {
-            entries.push(FlatPriceEntry {
-                key: format!("anthropic:{}", p.pattern),
-                input_per_mtok: p.input_per_mtok,
-                output_per_mtok: p.output_per_mtok,
-                cache_write_per_mtok: p.cache_write_per_mtok,
-                cache_read_per_mtok: p.cache_read_per_mtok,
-            });
-        }
-        for p in &self.prices.openai {
-            entries.push(FlatPriceEntry {
-                key: format!("openai:{}", p.pattern),
-                input_per_mtok: p.input_per_mtok,
-                output_per_mtok: p.output_per_mtok,
-                cache_write_per_mtok: p.cache_write_per_mtok,
-                cache_read_per_mtok: p.cache_read_per_mtok,
-            });
-        }
-        for p in &self.prices.deepseek {
-            entries.push(FlatPriceEntry {
-                key: format!("deepseek:{}", p.pattern),
-                input_per_mtok: p.input_per_mtok,
-                output_per_mtok: p.output_per_mtok,
-                cache_write_per_mtok: p.cache_write_per_mtok,
-                cache_read_per_mtok: p.cache_read_per_mtok,
-            });
-        }
-
+        let entries = self.prices.to_flat_entries();
         let content = serde_json::to_string_pretty(&entries)
             .context("Failed to serialize prices")?;
         std::fs::write(&prices_path, content)
@@ -247,8 +318,50 @@ mod tests {
     }
 
     #[test]
+    fn test_price_config_default_has_gemini() {
+        let prices = PriceConfig::default();
+        assert!(!prices.gemini.is_empty());
+        assert!(prices.gemini.iter().any(|p| p.pattern.contains("gemini")));
+    }
+
+    #[test]
+    fn test_price_config_load_from_external_json() {
+        let dir = std::env::temp_dir().join(format!("TokenJ_cfg_load_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let prices_path = dir.join("prices.json");
+
+        // 先写入外部价格表
+        let external = vec![
+            crate::config::FlatPriceEntry {
+                key: "anthropic:custom-model".into(),
+                input_per_mtok: 9.99,
+                output_per_mtok: 19.99,
+                cache_write_per_mtok: 5.0,
+                cache_read_per_mtok: 1.0,
+            },
+            crate::config::FlatPriceEntry {
+                key: "gemini:gemini-2.5-pro".into(),
+                input_per_mtok: 2.0,
+                output_per_mtok: 8.0,
+                cache_write_per_mtok: 2.0,
+                cache_read_per_mtok: 0.5,
+            },
+        ];
+        let content = serde_json::to_string_pretty(&external).unwrap();
+        std::fs::write(&prices_path, content).unwrap();
+
+        // 加载，验证外部条目合并到了默认值中
+        let prices = PriceConfig::load(&prices_path);
+        assert!(prices.anthropic.iter().any(|p| p.pattern == "custom-model"), "Should load external anthropic price");
+        assert!(prices.gemini.iter().any(|p| p.pattern == "gemini-2.5-pro"), "Should load external gemini price");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn test_export_prices_json_format() {
-        let dir = std::env::temp_dir().join(format!("tokenj_cfg_test_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_cfg_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -279,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_export_prices_contains_all_providers() {
-        let dir = std::env::temp_dir().join(format!("tokenj_cfg_prov_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("TokenJ_cfg_prov_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -298,6 +411,7 @@ mod tests {
         assert!(keys.iter().any(|k| k.starts_with("anthropic:")), "Should have anthropic prices");
         assert!(keys.iter().any(|k| k.starts_with("openai:")), "Should have openai prices");
         assert!(keys.iter().any(|k| k.starts_with("deepseek:")), "Should have deepseek prices");
+        assert!(keys.iter().any(|k| k.starts_with("gemini:")), "Should have gemini prices");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

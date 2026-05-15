@@ -94,54 +94,67 @@ impl Proxy {
         let addr = SocketAddr::from(([127, 0, 0, 1], self.config.port));
         let listener = TcpListener::bind(addr).await?;
 
-        info!("tokenJ proxy running on http://127.0.0.1:{}", self.config.port);
+        info!("TokenJ proxy running on http://127.0.0.1:{}", self.config.port);
 
         let svc = self.clone();
-        loop {
-            tokio::select! {
-                result = listener.accept() => {
-                    let (stream, peer_addr) = match result {
-                        Ok(s) => s,
-                        Err(e) => {
-                            warn!("Accept error: {}", e);
-                            continue;
+        let accept_loop = async {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, peer_addr)) => {
+                        let svc = svc.clone();
+                        tokio::spawn(async move {
+                            let mut peek_buf = [0u8; 7];
+                            match stream.peek(&mut peek_buf).await {
+                                Ok(n) if n >= 7 && &peek_buf[..7] == b"CONNECT" => {
+                                    if let Err(e) = svc.handle_connect_tunnel(stream).await {
+                                        warn!("CONNECT tunnel error from {}: {}", peer_addr, e);
+                                    }
+                                }
+                                _ => {
+                                    let io = TokioIo::new(stream);
+                                    if let Err(e) = http1::Builder::new()
+                                        .preserve_header_case(true)
+                                        .title_case_headers(true)
+                                        .serve_connection(io, service_fn(move |req| {
+                                            svc.clone().handle_direct_request(req)
+                                        }))
+                                        .await
+                                    {
+                                        warn!("Connection error from {}: {}", peer_addr, e);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        // 监听器被关闭时正常退出
+                        if e.kind() == std::io::ErrorKind::ConnectionReset
+                            || e.kind() == std::io::ErrorKind::NotConnected
+                        {
+                            break;
                         }
-                    };
-                    let svc = svc.clone();
+                        warn!("Accept error: {}", e);
+                    }
+                }
+            }
+            Ok::<_, anyhow::Error>(())
+        };
 
-                    tokio::spawn(async move {
-                        // Peek at first bytes to detect CONNECT vs normal HTTP
-                        let mut peek_buf = [0u8; 7];
-                        match stream.peek(&mut peek_buf).await {
-                            Ok(n) if n >= 7 && &peek_buf[..7] == b"CONNECT" => {
-                                if let Err(e) = svc.handle_connect_tunnel(stream).await {
-                                    warn!("CONNECT tunnel error from {}: {}", peer_addr, e);
-                                }
-                            }
-                            _ => {
-                                let io = TokioIo::new(stream);
-                                if let Err(e) = http1::Builder::new()
-                                    .preserve_header_case(true)
-                                    .title_case_headers(true)
-                                    .serve_connection(io, service_fn(move |req| {
-                                        svc.clone().handle_direct_request(req)
-                                    }))
-                                    .await
-                                {
-                                    warn!("Connection error from {}: {}", peer_addr, e);
-                                }
-                            }
-                        }
-                    });
+        tokio::select! {
+            result = accept_loop => {
+                if let Err(e) = result {
+                    warn!("Accept loop error: {}", e);
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    info!("Shutdown signal received, stopping proxy...");
-                    break;
-                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("Shutdown signal received, stopping proxy...");
+                // 停止接受新连接，现有 in-flight 请求继续处理
+                drop(listener);
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
 
-        info!("tokenJ proxy stopped.");
+        info!("TokenJ proxy stopped.");
         Ok(())
     }
 
@@ -206,8 +219,17 @@ impl Proxy {
             .await?;
 
         let mut server_stream = target_stream;
-        tokio::io::copy_bidirectional(&mut stream, &mut server_stream).await?;
-        debug!("CONNECT passthrough closed: {}:{}", host, port);
+        // 透传加 5 分钟超时，防止连接被僵尸占用
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(300),
+            tokio::io::copy_bidirectional(&mut stream, &mut server_stream),
+        )
+        .await;
+        match result {
+            Ok(Ok(_)) => debug!("CONNECT passthrough closed: {}:{}", host, port),
+            Ok(Err(e)) => warn!("CONNECT passthrough error for {}:{}: {}", host, port, e),
+            Err(_) => warn!("CONNECT passthrough timed out for {}:{} after 300s", host, port),
+        }
         Ok(())
     }
 
@@ -383,7 +405,7 @@ impl Proxy {
                             let _ = crate::db::insert_request_blocking(&db, &rec).await;
                         });
 
-                        let _ = event_tx.send(ProxyEvent {
+                        if event_tx.send(ProxyEvent {
                             provider: provider.name().into(),
                             model,
                             input_tokens: cache_result.input_tokens,
@@ -394,7 +416,9 @@ impl Proxy {
                             saving_rate: saving.saving_rate,
                             cache_injected: injection.injected,
                             duration_ms,
-                        });
+                        }).is_err() {
+                            debug!("No active dashboard subscribers, dropping event");
+                        }
 
                         let mut response: Response<Full<Bytes>> =
                             Response::new(Full::from(resp_body.to_vec()));
@@ -409,7 +433,7 @@ impl Proxy {
                     }
                     Err(e) => {
                         warn!("MITM forward failed for {}: {}", target_host, e);
-                        let body = format!("tokenJ proxy error: {}", e);
+                        let body = format!("TokenJ proxy error: {}", e);
                         let mut resp = Response::new(Full::from(body));
                         *resp.status_mut() = StatusCode::BAD_GATEWAY;
                         Ok(resp)
@@ -435,7 +459,22 @@ impl Proxy {
         self,
         req: Request<Incoming>,
     ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-        let host = req.uri().host().unwrap_or("").to_string();
+        // 直连模式下客户端发 origin-form 请求 (如 GET /v1/messages)，
+        // req.uri().host() 为空，需从 Host header 获取目标服务器
+        let host = req
+            .uri()
+            .host()
+            .map(|s| s.to_string())
+            .or_else(|| {
+                req.headers()
+                    .get("host")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| {
+                        // Host header 可能包含端口号 (如 "api.anthropic.com:443")，去掉端口
+                        s.split(':').next().unwrap_or(s).to_string()
+                    })
+            })
+            .unwrap_or_default();
         let provider = Provider::from_host(&host);
 
         // Read body
@@ -552,7 +591,7 @@ impl Proxy {
                     let _ = crate::db::insert_request_blocking(&db, &rec).await;
                 });
 
-                let _ = self.event_tx.send(ProxyEvent {
+                if self.event_tx.send(ProxyEvent {
                     provider: provider.name().into(),
                     model,
                     input_tokens: cache_result.input_tokens,
@@ -563,7 +602,9 @@ impl Proxy {
                     saving_rate: saving.saving_rate,
                     cache_injected: injection.injected,
                     duration_ms,
-                });
+                }).is_err() {
+                    debug!("No active dashboard subscribers, dropping event");
+                }
 
                 let mut response = Response::new(Full::from(resp_body.to_vec()));
                 *response.status_mut() = status;
@@ -577,7 +618,7 @@ impl Proxy {
             }
             Err(e) => {
                 warn!("Forward failed: {}", e);
-                let body = format!("tokenJ proxy error: {}", e);
+                let body = format!("TokenJ proxy error: {}", e);
                 let mut resp = Response::new(Full::from(body));
                 *resp.status_mut() = StatusCode::BAD_GATEWAY;
                 Ok(resp)

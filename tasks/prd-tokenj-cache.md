@@ -1,4 +1,4 @@
-# PRD: tokenJ — 自动缓存优化引擎
+# PRD: TokenJ — 自动缓存优化引擎
 
 ## 一句话定位
 
@@ -27,16 +27,16 @@
 
 用户不是不想省，是**太麻烦了**。需要一个工具来统一处理这些事情。
 
-### tokenJ 的解法
+### TokenJ 的解法
 
-tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 LLM SDK 的 base_url 指向 tokenJ，tokenJ 会自动：
+TokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 LLM SDK 的 base_url 指向 TokenJ，TokenJ 会自动：
 
 1. **检测 Provider 和模型** — 识别请求发往哪个 API
 2. **自动注入缓存策略** — 根据不同 Provider 的规则，自动添加缓存标记
 3. **监控缓存命中率** — 实时显示省了多少钱
 4. **容错处理** — 遇到不支持的 Provider（如 GLM-5），自动去掉不兼容字段
 
-**用户什么都不用改。装好、设好代理、开始工作。tokenJ 在中间默默帮你省钱。**
+**用户什么都不用改。装好、设好代理、开始工作。TokenJ 在中间默默帮你省钱。**
 
 ### 为什么是现在
 
@@ -68,10 +68,10 @@ tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 
 
 ### US-001: MITM 代理启动
 
-**Description:** As a user, 我想通过一行命令启动 tokenJ 代理，这样我能快速开始。
+**Description:** As a user, 我想通过一行命令启动 TokenJ 代理，这样我能快速开始。
 
 **Acceptance Criteria:**
-- [ ] 提供 `tokenJ proxy` 命令启动 MITM 代理
+- [ ] 提供 `TokenJ proxy` 命令启动 MITM 代理
 - [ ] 代理默认监听 `127.0.0.1:9100`
 - [ ] 支持 `--port` 参数自定义端口
 - [ ] 支持 `--daemon` 后台运行模式
@@ -81,7 +81,7 @@ tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 
 
 ### US-002: Provider 自动识别与缓存注入
 
-**Description:** As a user, 我想 tokenJ 自动适配不同 Provider 的缓存规则，不用我手动配置。
+**Description:** As a user, 我想 TokenJ 自动适配不同 Provider 的缓存规则，不用我手动配置。
 
 **Acceptance Criteria:**
 - [ ] 拦截到请求后，自动识别 Provider（基于 URL/域名）
@@ -105,7 +105,7 @@ tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 
 
 ### US-003: 响应解析与节省计算
 
-**Description:** As a user, 我想 tokenJ 自动解析响应中的缓存数据，告诉我每次请求省了多少钱。
+**Description:** As a user, 我想 TokenJ 自动解析响应中的缓存数据，告诉我每次请求省了多少钱。
 
 **Acceptance Criteria:**
 - [ ] 对 Anthropic 响应：解析 `usage.cache_creation_input_tokens` 和 `usage.cache_read_input_tokens`
@@ -118,15 +118,15 @@ tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 
 
 ### US-004: 实时仪表盘（TUI）
 
-**Description:** As a user, 我想在终端中实时看到 tokenJ 帮我省了多少钱。
+**Description:** As a user, 我想在终端中实时看到 TokenJ 帮我省了多少钱。
 
 **Acceptance Criteria:**
-- [ ] 提供 `tokenJ dashboard` 命令启动 TUI
+- [ ] 提供 `TokenJ dashboard` 命令启动 TUI
 - [ ] 仪表盘包含 4 个面板：
 
 ```
 ┌─────────────────────────────────────────────────┐
-│ tokenJ 实时节省面板                   累计: $12.45│
+│ TokenJ 实时节省面板                   累计: $12.45│
 ├──────────┬──────────┬──────────┬──────────────────┤
 │ 实时请求   │ 今日统计   │ 命中排行   │ 模型分布          │
 │           │          │          │                  │
@@ -152,16 +152,16 @@ tokenJ 是一个本地 MITM 代理（中间人代理）。用户安装后，把 
 
 ### US-005: 首个启动体验（Onboarding）
 
-**Description:** As a new user, 我想在安装后 60 秒内看到 tokenJ 帮我省了第一笔钱。
+**Description:** As a new user, 我想在安装后 60 秒内看到 TokenJ 帮我省了第一笔钱。
 
 **Acceptance Criteria:**
-- [ ] 首次运行 `tokenJ proxy` 时输出：
+- [ ] 首次运行 `TokenJ proxy` 时输出：
 
 ```
 $ tokenJ proxy
 
   ╔══════════════════════════════════════════════╗
-  ║        tokenJ  — 自动缓存优化引擎             ║
+   ║        TokenJ  — 自动缓存优化引擎             ║
   ║        装了就省，零配置                       ║
   ╚══════════════════════════════════════════════╝
 
@@ -181,10 +181,10 @@ $ tokenJ proxy
 
     3. 开始工作！任何 LLM 请求都会自动优化。
 
-   仪表盘: tokenJ dashboard
+   仪表盘: TokenJ dashboard
 ```
 
-- [ ] 提供 `tokenJ demo` 命令：启动演示模式
+- [ ] 提供 `TokenJ demo` 命令：启动演示模式
 - [ ] 演示模式内置一组模拟的历史请求数据
 - [ ] 演示模式展示 TUI 并标注"这是演示数据"
 - [ ] 演示数据展示"安装前 vs 安装后"的对比效果
@@ -194,19 +194,19 @@ $ tokenJ proxy
 **Description:** As a user, 我想自定义 tokenJ 的配置，比如端口、价格表、排除规则。
 
 **Acceptance Criteria:**
-- [ ] 支持 `~/.tokenj/config.json` 配置文件
+- [ ] 支持 `~/.TokenJ/config.json` 配置文件
 - [ ] CLI 参数优先级高于配置文件
 - [ ] 可配置项：`port`、`cert_dir`、`prices`（自定义价格表）、`exclude_hosts`（排除不做缓存的域名）
-- [ ] 提供 `tokenJ config init` 生成默认配置
-- [ ] 提供 `tokenJ config show` 显示当前配置
-- [ ] 提供 `tokenJ config set <key> <value>` 修改配置项
+- [ ] 提供 `TokenJ config init` 生成默认配置
+- [ ] 提供 `TokenJ config show` 显示当前配置
+- [ ] 提供 `TokenJ config set <key> <value>` 修改配置项
 
 ### US-007: 兼容性保障
 
-**Description:** As a user, 我不想因为用了 tokenJ 导致请求出错。
+**Description:** As a user, 我不想因为用了 TokenJ 导致请求出错。
 
 **Acceptance Criteria:**
-- [ ] 对于所有请求，tokenJ 不修改请求 body 中除了缓存相关字段以外的任何内容
+- [ ] 对于所有请求，TokenJ 不修改请求 body 中除了缓存相关字段以外的任何内容
 - [ ] 对于不支持缓存的 Provider，自动去掉 cache_control 等不兼容字段
 - [ ] 如果注入缓存字段导致 Provider 报错，自动降级：不再对该 Provider 做任何修改
 - [ ] 提供 `--safe-mode` 参数：只监控不注入，用户手动验证后再开启自动注入
@@ -217,14 +217,14 @@ $ tokenJ proxy
 - **FR-1**: 代理基于 Rust 实现，使用 `hyper` 和 `tokio` 构建异步 HTTP 服务器
 - **FR-2**: 代理支持 HTTP CONNECT 隧道 + MITM TLS 解密
 - **FR-3**: 首次启动自动生成自签名 CA 根证书（RSA 2048 位）
-- **FR-4**: 证书有效期 10 年，存储在 `~/.tokenj/certs/` 目录
+- **FR-4**: 证书有效期 10 年，存储在 `~/.TokenJ/certs/` 目录
 - **FR-5**: Provider 识别基于请求 URL 的域名匹配（精确匹配 + 通配符）
 - **FR-6**: 价格表内置，覆盖主流模型；支持通过配置文件自定义
-- **FR-7**: 价格表按季度更新，提供 `tokenJ update-prices` 命令
-- **FR-8**: 数据库使用 SQLite，存储在 `~/.tokenj/data.db`
+- **FR-7**: 价格表按季度更新，提供 `TokenJ update-prices` 命令
+- **FR-8**: 数据库使用 SQLite，存储在 `~/.TokenJ/data.db`
 - **FR-9**: 数据库保留策略：默认保留 7 天数据
-- **FR-10**: 支持 `tokenJ dashboard --no-tui` 模式：在终端输出纯文本摘要（适合没有 TTY 的环境）
-- **FR-11**: 支持 `tokenJ stats` 命令：打印纯文本统计摘要
+- **FR-10**: 支持 `TokenJ dashboard --no-tui` 模式：在终端输出纯文本摘要（适合没有 TTY 的环境）
+- **FR-11**: 支持 `TokenJ stats` 命令：打印纯文本统计摘要
 
 ## Architecture
 
@@ -237,7 +237,7 @@ $ tokenJ proxy
        │  + TLS handshake                  │
        ▼                                  │
 ┌───────────────────────────────────────────┐
-│            tokenJ MITM Proxy               │
+│            TokenJ MITM Proxy               │
 │                                            │
 │  ① 拦截 CONNECT 请求 → TLS 解密            │
 │  ② 解析 HTTP 请求 → 识别 Provider/模型     │
@@ -273,7 +273,7 @@ $ tokenJ proxy
     ]
   }
 
-tokenJ 拦截后修改:
+TokenJ 拦截后修改:
   POST https://api.anthropic.com/v1/messages
   {
     "model": "claude-opus-4-7",
@@ -281,7 +281,7 @@ tokenJ 拦截后修改:
       {
         "type": "text",
         "text": "You are... (5000 tokens)",
-        "cache_control": {"type": "ephemeral"}  ← tokenJ 自动注入
+        "cache_control": {"type": "ephemeral"}  ← TokenJ 自动注入
       }
     ],
     "messages": [
@@ -300,7 +300,7 @@ Provider 响应:
   }
 
 第二次请求（同一 system prompt）:
-  → tokenJ 注入 cache_control → Provider 命中缓存
+  → TokenJ 注入 cache_control → Provider 命中缓存
   → 响应: "cache_read_input_tokens": 5000
   → 成本: 5000 tokens × $0.50/MTok = $0.0025（而不是 $0.025）
   → 节省: 90%
@@ -321,7 +321,7 @@ CREATE TABLE requests (
     estimated_cost REAL NOT NULL,       -- 实际成本（美分）
     estimated_saving REAL DEFAULT 0,    -- 节省金额（美分）
     saving_rate REAL DEFAULT 0,         -- 节省百分比
-    cache_injected BOOLEAN DEFAULT 0,   -- tokenJ 是否注入了缓存标记
+    cache_injected BOOLEAN DEFAULT 0,   -- TokenJ 是否注入了缓存标记
     duration_ms INTEGER,                -- 请求耗时
     created_at TEXT NOT NULL
 );
@@ -342,7 +342,7 @@ CREATE TABLE sessions (
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  tokenJ                    累计节省: $12.45    缓存命中率: 68% │
+│  TokenJ                    累计节省: $12.45    缓存命中率: 68% │
 ├───────────────┬─────────────────┬────────────────────────┤
 │ 📡 实时请求流    │ 📊 今日统计       │ 🏆 缓存命中排行        │
 │               │                  │                        │
@@ -386,7 +386,7 @@ CREATE TABLE sessions (
 2. 用户安装 CA 证书到系统信任存储
 3. 客户端配置 HTTP_PROXY/HTTPS_PROXY
 4. 客户端发送 CONNECT 请求建立隧道
-5. tokenJ 用 CA 证书动态签发对应域名证书
+5. TokenJ 用 CA 证书动态签发对应域名证书
 6. 完成 TLS 握手 → 解密请求内容
 7. 处理 → 重新加密 → 转发到真实服务器
 8. 反向同样处理响应
@@ -452,7 +452,7 @@ Anthropic 的缓存规则：
 - 缓存的是**完整前缀**（system + tools + messages 按顺序）
 - 最小缓存粒度：1024 tokens
 
-**tokenJ 的策略**：
+**TokenJ 的策略**：
 1. 优先在 `system` 上注入（最稳定的缓存目标）
 2. 如果 system 长度不足 1024 tokens，检查 `messages` 前面的 user/assistant 对
 3. 如果仍不足 1024，不做注入（Mark 为"不可缓存"）
@@ -466,7 +466,7 @@ OpenAI 的缓存规则：
 - 缓存粒度：128 tokens 增量
 - `prompt_cache_key` 参数可以提升路由一致性
 
-**tokenJ 的策略**：
+**TokenJ 的策略**：
 1. 检查 prompt 是否超过 1024 tokens
 2. 如果超过，自动生成 `prompt_cache_key`（基于 system prompt 的 SHA256 前 8 位）
 3. 这样同一份 system prompt 的请求会被路由到同一台服务器
@@ -504,13 +504,13 @@ OpenAI 的缓存规则：
 
 | 产品 | 用途 | 和 tokenJ 的关系 |
 |------|------|----------------|
-| **OpenAI/Anthropic 原生缓存** | Provider 功能 | tokenJ 是"自动帮你启用这些功能的工具" |
-| **Helicone / Langfuse** | LLM 可观测性平台 | tokenJ 不是可观测性工具，是省钱工具 |
-| **Token Optimizer MCP** | 客户端缓存+压缩 | tokenJ 是服务端缓存优化，可互补 |
-| **tokencost** | Token 成本监控 | tokenJ 不监控，直接省钱 |
-| **Snip / RTK** | 请求内容裁剪 | tokenJ 不修改内容，只加缓存标记 |
+| **OpenAI/Anthropic 原生缓存** | Provider 功能 | TokenJ 是"自动帮你启用这些功能的工具" |
+| **Helicone / Langfuse** | LLM 可观测性平台 | TokenJ 不是可观测性工具，是省钱工具 |
+| **Token Optimizer MCP** | 客户端缓存+压缩 | TokenJ 是服务端缓存优化，可互补 |
+| **tokencost** | Token 成本监控 | TokenJ 不监控，直接省钱 |
+| **Snip / RTK** | 请求内容裁剪 | TokenJ 不修改内容，只加缓存标记 |
 
-**核心差异**：所有现有工具要么是"看花了多少"，要么是"改内容来省"。tokenJ 是唯一一个**利用 Provider 现有折扣来省钱的工具**。
+**核心差异**：所有现有工具要么是"看花了多少"，要么是"改内容来省"。TokenJ 是唯一一个**利用 Provider 现有折扣来省钱的工具**。
 
 ## 发布策略
 
@@ -536,12 +536,12 @@ Day 60:  v0.3.0 — 增加更多 Provider + 配置界面完善
 
 ```
 STEP 0: 安装
-  macOS/Linux:  curl -fsSL https://tokenj.dev/install.sh | sh
-  Windows:      winget install tokenJ
-  或:           cargo install tokenJ
+  macOS/Linux:  curl -fsSL https://TokenJ.dev/install.sh | sh
+  Windows:      winget install TokenJ
+  或:           cargo install TokenJ
 
 STEP 1: 启动代理
-  $ tokenJ proxy
+$ TokenJ proxy
 
 STEP 2: 安装 CA 证书（按终端输出指引，一次性的）
   Windows:  双击 ca.crt → 安装到"受信任的根证书颁发机构"
@@ -551,11 +551,11 @@ STEP 3: 设置环境变量
   export HTTPS_PROXY=http://127.0.0.1:9100
 
 STEP 4: 正常使用 LLM（Claude Code / Cursor / OpenAI SDK ...）
-  $ claude      ← tokenJ 自动拦截，注入缓存
+  $ claude      ← TokenJ 自动拦截，注入缓存
   $ python app.py  ← 同上
 
 STEP 5: 看效果
-  $ tokenJ dashboard
+  $ TokenJ dashboard
   → 实时显示: 今日省了 $12.45，命中率 72%
 
 从安装到看到第一笔节省: < 3 分钟

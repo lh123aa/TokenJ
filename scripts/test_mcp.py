@@ -1,4 +1,4 @@
-"""Test tokenJ MCP Server - all tools"""
+"""Test TokenJ MCP Server - all tools"""
 import subprocess
 import json
 import time
@@ -6,12 +6,12 @@ import sys
 
 def test():
     print("=" * 50)
-    print("tokenJ MCP Server 测试")
+    print("TokenJ MCP Server 测试")
     print("=" * 50)
 
     # Start MCP server
     proc = subprocess.Popen(
-        ["python", "scripts/tokenj_mcp_server.py"],
+        ["python", "scripts/TokenJ_mcp_server.py"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

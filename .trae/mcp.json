@@ -1,9 +1,10 @@
 {
   "mcpServers": {
-    "tokenj": {
-      "command": "python",
+    "TokenJ": {
+      "command": "cmd.exe",
       "args": [
-        "e:\\程序\\tokenJ\\scripts\\tokenj_mcp_server.py"
+        "/c",
+        "e:\\程序\\tokenJ\\.trae\\TokenJ_mcp.bat"
       ],
       "description": "TokenJ - LLM API 自动缓存优化引擎"
     }

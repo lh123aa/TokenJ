@@ -1,4 +1,4 @@
-# tokenJ 运行验证日志
+# TokenJ 运行验证日志
 
 ## 环境信息
 - 操作系统: Windows 11 (x86_64-pc-windows-msvc)
@@ -20,7 +20,7 @@
 | 2026-05-14 | get_history 工具 | ✅ | 50 条限制正常 |
 | 2026-05-14 | estimate_savings 工具 | ✅ | 年化节省计算正确 |
 | 2026-05-14 | 演示数据注入 | ✅ | 10 条跨 Provider 样本 |
-| 2026-05-14 | PATH 环境变量 | ✅ | tokenj 全局可用 |
+| 2026-05-14 | PATH 环境变量 | ✅ | TokenJ 全局可用 |
 | 2026-05-14 | .trae/mcp.json | ✅ | Trae MCP 配置就绪 |
 | 2026-05-14 | Python语法检查 | ✅ | 3 个脚本全部通过 |
 
@@ -29,7 +29,7 @@
 | 问题 | 原因 | 修复 |
 |:----|:----|:----|
 | 中文路径链接失败 | Rust MSVC link.exe Unicode bug | 切换到 nightly 工具链编译 |
-| crate 名警告 | 非 snake_case | Cargo.toml `name = "tokenj"` |
+| crate 名警告 | 非 snake_case | Cargo.toml `name = "TokenJ"` |
 | 未使用变量警告 | event_rx/event_tx 未使用 | 加 `_` 前缀 |
 | Mutex poison risk | 5 处 unwrap | 替换为 `expect("描述")` |
 | Provider 大小写敏感 | from_host 无 to_lowercase | 加 `host.to_lowercase()` |
@@ -44,7 +44,7 @@
 |:----|:----|:----|
 | 中文路径需 subst | 编译需要额外步骤 | 后续迁移项目到纯英文路径 |
 | MITM 代理不完整 | 仅支持 direct url 转发 | Phase 2 实现 |
-| 价格表硬编码 | 模型价格变化需手动更新 | 后续提供 `tokenj update-prices` |
+| 价格表硬编码 | 模型价格变化需手动更新 | 后续提供 `TokenJ update-prices` |
 | TUI 中文终端兼容性 | 非 UTF-8 终端可能乱码 | 后续优化 |
 
 ## 验证结果
@@ -55,7 +55,7 @@ Rust 测试:   ✅ 33/33 通过
 MCP 工具:    ✅ 4/4 正常
 演示数据:    ✅ 10 条已注入
 Trae 集成:   ✅ .trae/mcp.json 就绪
-PATH 安装:   ✅ tokenj 命令可用
+PATH 安装:   ✅ TokenJ 命令可用
 ```
 
-> 本日志由系统自动生成，记录 tokenJ 的安装、配置、测试全过程。
+> 本日志由系统自动生成，记录 TokenJ 的安装、配置、测试全过程。

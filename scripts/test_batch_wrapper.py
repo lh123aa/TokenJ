@@ -1,7 +1,7 @@
 """Test batch wrapper for MCP"""
 import subprocess, json, time, sys
 
-batch_path = r"e:\程序\tokenJ\.trae\tokenj_mcp.bat"
+batch_path = r"e:\程序\tokenJ\.trae\TokenJ_mcp.bat"
 
 proc = subprocess.Popen(
     ["cmd.exe", "/c", batch_path],

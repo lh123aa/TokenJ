@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ========================================
-echo   tokenJ - 快速启动
+echo   TokenJ - 快速启动
 echo ========================================
 echo.
 
@@ -25,9 +25,9 @@ echo ========================================
 echo   全部就绪！使用方法：
 echo ========================================
 echo.
-echo   tokenJ 终端        - 任意位置输入 tokenj --help
-echo   tokenj demo        - 启动演示模式
-echo   tokenj dashboard   - 实时仪表盘
+echo   TokenJ 终端        - 任意位置输入 TokenJ --help
+echo   TokenJ demo        - 启动演示模式
+echo   TokenJ dashboard   - 实时仪表盘
 echo.
 echo   MCP 已配置到 .trae/mcp.json
 echo   重启 Trae 后自动生效

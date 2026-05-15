@@ -1,5 +1,5 @@
 [package]
-name = "tokenj"
+name = "TokenJ"
 version = "0.2.0"
 edition = "2021"
 description = "Automatic LLM API cache optimizer - save up to 90% on API costs"

@@ -92,7 +92,7 @@
 
 ```bash
 # 1. Start the proxy
-tokenj proxy
+TokenJ proxy
 
 # 2. Point your SDK's base_url to the proxy
 ```
@@ -110,7 +110,7 @@ client = DeepSeek(base_url="http://127.0.0.1:9100")
 
 ```bash
 # 3. Watch the savings
-tokenj dashboard
+TokenJ dashboard
 ```
 
 ### Mode B: HTTPS_PROXY Mode (MITM ✅)
@@ -120,13 +120,13 @@ tokenj dashboard
 export HTTPS_PROXY=http://127.0.0.1:9100
 
 # Start the proxy
-tokenj proxy
+TokenJ proxy
 
 # LLM domains → auto TLS decrypt + cache injection ✅
 # Other domains → transparent passthrough
 ```
 
-> ⚠️ First‑time use of Mode B requires installing the CA certificate. Run `tokenj proxy` and follow the printed instructions.
+> ⚠️ First‑time use of Mode B requires installing the CA certificate. Run `TokenJ proxy` and follow the printed instructions.
 
 ---
 
@@ -148,7 +148,7 @@ tokenj proxy
           │                     │
           ▼                     ▼
    ┌──────────────────────────────────────┐
-   │          tokenj proxy                │
+   │          TokenJ proxy                │
    │                                      │
    │  ┌──────────────────────────────┐    │
    │  │  ① Identify provider + model │    │
@@ -308,7 +308,7 @@ Total           70 tests
 
 ## 🎮 Demo Mode
 
-Run `tokenj demo` to see the live TUI dashboard:
+Run `TokenJ demo` to see the live TUI dashboard:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -376,10 +376,10 @@ TokenJ ships with an MCP Server for IDE integration (Trae / VS Code / Cursor):
 ### From Source
 
 ```bash
-git clone https://github.com/your/tokenJ.git
-cd tokenJ
+git clone https://github.com/lh123aa/TokenJ.git
+cd TokenJ
 cargo build --release
-./target/release/tokenj --version
+./target/release/TokenJ --version
 ```
 
 ### Prerequisites
@@ -393,10 +393,10 @@ cargo build --release
 
 | Command | Description |
 |:--------|:------------|
-| `tokenj proxy` | Start the proxy (default 127.0.0.1:9100) |
-| `tokenj dashboard` | Open the live TUI dashboard |
+| `TokenJ proxy` | Start the proxy (default 127.0.0.1:9100) |
+| `TokenJ dashboard` | Open the live TUI dashboard |
 | `tokenj demo` | Demo mode (built‑in sample data) |
-| `tokenj --help` | Show help |
+| `TokenJ --help` | Show help |
 
 ---
 

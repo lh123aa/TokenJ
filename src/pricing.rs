@@ -73,6 +73,7 @@ fn find_price(config: &Config, provider: &str, model: &str) -> crate::config::Mo
         "anthropic" => &config.prices.anthropic,
         "openai" => &config.prices.openai,
         "deepseek" => &config.prices.deepseek,
+        "gemini" => &config.prices.gemini,
         _ => return crate::config::ModelPrice {
             model: model.into(),
             pattern: "".into(),

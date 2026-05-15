@@ -1,11 +1,11 @@
-"""Inject demo data into tokenJ database so tools show results immediately"""
+"""Inject demo data into TokenJ database so tools show results immediately"""
 import sqlite3
 import uuid
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DATA_DIR = Path.home() / ".tokenj"
+DATA_DIR = Path.home() / ".TokenJ"
 DB_PATH = DATA_DIR / "data.db"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -69,4 +69,4 @@ conn.commit()
 conn.close()
 
 print(f"Injected {len(samples)} demo records into {DB_PATH}")
-print("Demo data ready! Run 'tokenj demo' or use MCP tools.")
+print("Demo data ready! Run 'TokenJ demo' or use MCP tools.")

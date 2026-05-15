@@ -51,6 +51,11 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
 
+        // 如果数据库文件是 0 字节（崩溃后留下的无效空文件），先删除再重建
+        if db_path.exists() && std::fs::metadata(db_path)?.len() == 0 {
+            std::fs::remove_file(db_path)?;
+        }
+
         let conn = Connection::open(db_path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
 
@@ -229,7 +234,7 @@ mod tests {
 
     fn temp_db() -> (Database, std::path::PathBuf) {
         let uid = Uuid::new_v4();
-        let path = std::env::temp_dir().join(format!("tokenj_db_test_{}.db", uid));
+        let path = std::env::temp_dir().join(format!("TokenJ_db_test_{}.db", uid));
         let db = Database::new(&path).unwrap();
         (db, path)
     }

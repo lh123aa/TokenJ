@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: TokenJ-${{ runner.os }}-${{ github.sha }}
+          path: target/release/TokenJ${{ runner.os == 'Windows' && '.exe' || '' }}
+          retention-days: 7
+
+  python-mcp:
+    name: Python MCP Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install mcp
+
+      - name: Python syntax check
+        run: |
+          python -m py_compile scripts/TokenJ_mcp_server.py
+          python -m py_compile scripts/seed_demo_data.py
+          python -m py_compile scripts/verify.py
+
+      - name: MCP server import check
+        run: python -c "import sys; sys.path.insert(0, 'scripts'); from TokenJ_mcp_server import get_stats, get_repeats, get_history, estimate_savings; print('✅ MCP imports OK')"

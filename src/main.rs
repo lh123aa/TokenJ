@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "tokenJ", version = "0.2.0", about = "Automatic LLM API cache optimizer - save up to 90% on API costs")]
+#[command(name = "TokenJ", version = "0.2.0", about = "Automatic LLM API cache optimizer - save up to 90% on API costs")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -59,7 +59,7 @@ async fn run_proxy(port: u16) -> Result<()> {
 
     println!();
     println!("  ╔══════════════════════════════════════════════╗");
-    println!("  ║        tokenJ — 自动缓存优化引擎            ║");
+    println!("  ║        TokenJ — 自动缓存优化引擎            ║");
     println!("  ║        装了就省钱 · 零配置                   ║");
     println!("  ║        当前模式: 直连模式                    ║");
     println!("  ╚══════════════════════════════════════════════╝");
@@ -92,7 +92,7 @@ async fn run_proxy(port: u16) -> Result<()> {
     println!();
     println!("  💡 首次使用方式 B 需安装 CA 证书（见上方指引）");
     println!();
-    println!("  📊 打开仪表盘: tokenJ dashboard");
+    println!("  📊 打开仪表盘: TokenJ dashboard");
     println!("  🛑 按 Ctrl+C 停止代理");
     println!();
 
@@ -119,7 +119,7 @@ async fn run_proxy(port: u16) -> Result<()> {
                 let cost = stats.total_cost_cents / 100.0;
                 let saving = stats.total_saving_cents / 100.0;
                 println!(
-                    "  [tokenJ] 请求: {} | 成本: ${:.2} | 节省: ${:.2} | 命中率: {:.1}%",
+                    "  [TokenJ] 请求: {} | 成本: ${:.2} | 节省: ${:.2} | 命中率: {:.1}%",
                     stats.total_requests, cost, saving, stats.cache_hit_rate
                 );
             }

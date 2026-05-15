@@ -5,7 +5,7 @@
       "args": [
         "e:\\程序\\tokenJ\\scripts\\tokenj_mcp_server.py"
       ],
-      "description": "tokenJ - LLM API 自动缓存优化引擎"
+      "description": "TokenJ - LLM API 自动缓存优化引擎"
     }
   }
 }

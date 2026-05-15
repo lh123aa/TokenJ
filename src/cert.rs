@@ -74,7 +74,7 @@ impl CertManager {
         params.distinguished_name = DistinguishedName::new();
         params
             .distinguished_name
-            .push(DnType::CommonName, "tokenJ Root CA");
+            .push(DnType::CommonName, "TokenJ Root CA");
         let cert = params.self_signed(&key_pair)?;
         Ok((cert, key_pair))
     }

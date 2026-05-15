@@ -72,7 +72,7 @@ fn render_header(frame: &mut Frame, area: Rect, stats: &SessionStats) {
         .style(Style::default().fg(Color::Cyan));
 
     let text = Paragraph::new(Line::from(vec![
-        Span::styled(" tokenJ ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(" TokenJ ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         Span::raw("│"),
         Span::styled(format!(" 节省 ${:.2}", total_saving), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
         Span::raw(format!(" 成本 ${:.2}", total_cost)).fg(Color::Yellow),
@@ -209,7 +209,7 @@ fn render_events_panel(frame: &mut Frame, area: Rect, events: &[ProxyEvent]) {
 fn render_footer(frame: &mut Frame, area: Rect) {
     let text = Paragraph::new(Line::from(vec![
         Span::raw("  [q] 退出  "),
-        Span::styled("tokenJ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled("TokenJ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         Span::raw(" 自动缓存优化引擎  "),
         Span::styled("装了就省钱", Style::default().fg(Color::Green)),
     ]))

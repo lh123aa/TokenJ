@@ -19,7 +19,7 @@
 ╚══════════════════════════════════════════════════════════╝
 ```
 
-# tokenJ 🚀
+# TokenJ 🚀
 
 **Zero‑config LLM API cache optimizer. Save up to 90%. No code changes needed.**
 
@@ -35,7 +35,7 @@
 
 ## 💎 One‑Liner
 
-> **tokenJ is a local proxy that intercepts your LLM API requests, automatically injects cache headers for each provider, and lets Anthropic / OpenAI / DeepSeek / Gemini's built-in caching discounts work for you — **without changing your code**.**
+> **TokenJ is a local proxy that intercepts your LLM API requests, automatically injects cache headers for each provider, and lets Anthropic / OpenAI / DeepSeek / Gemini's built-in caching discounts work for you — **without changing your code**.**
 
 ---
 
@@ -148,7 +148,7 @@ tokenj proxy
           │                     │
           ▼                     ▼
    ┌──────────────────────────────────────┐
-   │          tokenJ Proxy                │
+   │          tokenj proxy                │
    │                                      │
    │  ┌──────────────────────────────┐    │
    │  │  ① Identify provider + model │    │
@@ -175,7 +175,7 @@ tokenj proxy
 ### MITM Flow
 
 ```
-Client                         tokenJ                       Provider
+Client                         TokenJ                       Provider
   │                              │                            │
   │  CONNECT api.anthropic.com   │                            │
   │────────────────────────────▶│                            │
@@ -228,7 +228,7 @@ Runtime memory                               ~18 MB
 
 ### vs. Alternatives
 
-| Metric | tokenJ | mitmproxy | LiteLLM |
+| Metric | TokenJ | mitmproxy | LiteLLM |
 |:-------|:------:|:---------:|:-------:|
 | **Language** | Rust ✅ | Python | Python |
 | **Binary** | **10 MB** single file | ~50 MB | ~200 MB |
@@ -241,7 +241,7 @@ Runtime memory                               ~18 MB
 
 ### Impact on Real LLM Calls
 
-LLM APIs take **1–30 seconds** to respond. tokenJ adds only **6–12ms** — that's **< 0.1%** overhead.
+LLM APIs take **1–30 seconds** to respond. TokenJ adds only **6–12ms** — that's **< 0.1%** overhead.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -276,7 +276,7 @@ Result:
 ### All 70 Tests Pass ✅
 
 ```
-📦 tokenJ — 70 passed, 0 failed, 0 warnings
+📦 TokenJ — 70 passed, 0 failed, 0 warnings
 
 pricing         ████████████████████████████████ 13
 proxy/tls       ████████████████████████████████ 11
@@ -312,7 +312,7 @@ Run `tokenj demo` to see the live TUI dashboard:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  tokenJ │ Savings $0.04 Cost $0.04 │ Hit Rate 85.7% Reqs 31 │
+│  TokenJ │ Savings $0.04 Cost $0.04 │ Hit Rate 85.7% Reqs 31 │
 ├───────────────┬────────────────┬───────────────┬──────────────┤
 │ 💰 Savings    │ 📊 Requests    │ 🎯 Cache      │ 📈 Models    │
 │               │                │               │              │
@@ -339,7 +339,7 @@ Run `tokenj demo` to see the live TUI dashboard:
 
 ## 🔍 MCP Server Verification
 
-tokenJ ships with an MCP Server for IDE integration (Trae / VS Code / Cursor):
+TokenJ ships with an MCP Server for IDE integration (Trae / VS Code / Cursor):
 
 ```
 === get_stats ===
@@ -376,8 +376,8 @@ tokenJ ships with an MCP Server for IDE integration (Trae / VS Code / Cursor):
 ### From Source
 
 ```bash
-git clone https://github.com/your/tokenj.git
-cd tokenj
+git clone https://github.com/your/tokenJ.git
+cd tokenJ
 cargo build --release
 ./target/release/tokenj --version
 ```
@@ -404,7 +404,7 @@ cargo build --release
 
 ```
 ┌──────────────────────────────────────────┐
-│               tokenJ                      │
+│               TokenJ                      │
 ├──────────────────────────────────────────┤
 │  Runtime     │  tokio (async)             │
 │  HTTP        │  hyper 1.x                 │
@@ -436,7 +436,7 @@ python scripts/verify.py
 
 ## 📄 License
 
-MIT © 2026 tokenJ
+MIT © 2026 TokenJ
 
 ---
 
